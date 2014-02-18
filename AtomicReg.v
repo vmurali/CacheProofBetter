@@ -1,4 +1,4 @@
-Require Import DataTypes StoreAtomicity Case NamedTransProp.
+Require Import DataTypes StoreAtomicityNew Case NamedTransProp.
 
 Set Implicit Arguments.
 
@@ -230,6 +230,9 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
             end
           | _ => True
         end.
+    Proof.
+      admit.
+    Qed.
 
   End SomeList.
 
