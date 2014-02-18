@@ -130,6 +130,26 @@ Section Induction.
   Qed.
 End Induction.
 
+Section StrongInd.
+  Context {P: nat -> Type}.
+  Hypothesis case_n: forall {t}, (forall ti, ti < t -> P ti) -> P t.
+  Theorem strong_ind t: P t.
+  Proof.
+    assert (case0: P 0).
+    specialize (case_n 0).
+    assert (ez: forall ti, ti < 0 -> P ti) by (intros ti cond; assert False by omega;
+                                               intuition).
+    apply (case_n ez).
+    assert (casen: forall {t}, (forall ti, ti <= t -> P ti) -> P (S t)).
+    intros t0 cond.
+    assert (cond2: forall ti, ti < S t0 -> P ti) by (intros ti cond2;
+                                                     assert (ti <= t0) by omega;
+                                                     intuition).
+    apply (case_n (S t0) cond2).
+    apply (ind case0 casen t).
+  Qed.
+End StrongInd.
+
 
     Theorem listNeq: forall {A} (x: A) l, x :: l <> l.
       unfold not; intros A x l eq.
