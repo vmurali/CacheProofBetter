@@ -3,6 +3,14 @@ Require Import Coq.Logic.Classical Rules DataTypes MsiState L1 Omega Coq.Relatio
 Module mkL1Axioms : L1Axioms mkDataTypes.
   Import mkDataTypes.
 
+  Theorem deqOrNot: forall t, {x| deqR (fst x) (snd x) t} + {forall c i, ~ deqR c i t}.
+  Proof.
+    intros t.
+    unfold deqR.
+    destruct (trans oneBeh t);
+      solve [left; apply (exist _ (c, (req (sys oneBeh t) c))); intuition | intuition].
+  Qed.
+
   Theorem deqLeaf: forall {c i t}, deqR c i t -> leaf c.
   Proof.
     intros c i t deqr.
@@ -77,70 +85,6 @@ Module mkL1Axioms : L1Axioms mkDataTypes.
   Qed.
 
 
-  Theorem deqImpEnq: forall {c i t}, deqR c i t ->
-                                     match desc (reqFn c i) with
-                                       | Ld => enqLd c i (data c (loc (reqFn c i)) t) t
-                                       | St => enqSt c i t
-                                     end.
-  Proof.
-    intros c i t deqr.
-    unfold state.
-    unfold deqR in *; unfold enqLd; unfold enqSt; unfold data.
-    destruct (trans oneBeh t).
-    destruct deqr as [eq u].
-    rewrite eq in *; rewrite u in *; rewrite e in *.
-    intuition.
-    destruct deqr as [eq u].
-    rewrite eq in *; rewrite u in *; rewrite e in *.
-    intuition.
-    simpl in *; firstorder.
-    simpl in *; firstorder.
-    simpl in *; firstorder.
-    simpl in *; firstorder.
-    simpl in *; firstorder.
-    simpl in *; firstorder.
-    simpl in *; firstorder.
-    simpl in *; firstorder.
-  Qed.
-
-  Theorem enqLdImpDeq: forall {c i st t}, enqLd c i st t -> deqR c i t /\ desc (reqFn c i) = Ld /\
-                                                          data c (loc (reqFn c i)) t = st.
-  Proof.
-    intros c i st t enql.
-    unfold enqLd in *; unfold deqR; unfold data.
-    destruct (trans oneBeh t).
-    destruct enql as [eq [u1 u2]].
-    rewrite eq in *; rewrite u1 in *; rewrite u2 in *.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-  Qed.
-    
-  Theorem enqStImpDeq: forall {c i t}, enqSt c i t -> deqR c i t /\ desc (reqFn c i) = St.
-  Proof.
-    intros c i t enql.
-    unfold enqSt in *; unfold deqR; unfold data.
-    destruct (trans oneBeh t).
-    intuition.
-    destruct enql as [eq u1].
-    rewrite eq in *; rewrite u1 in *.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-    intuition.
-  Qed.
 
   Theorem reqGe: forall {c t1 t2}, t1 <= t2 -> req (sys oneBeh t2) c >= req (sys oneBeh t1) c.
   Proof.
@@ -253,6 +197,22 @@ Module mkL1Axioms : L1Axioms mkDataTypes.
     intuition.
     intuition.
     intuition.
+  Qed.
+
+  Theorem uniqDeqProc3: forall {c1 i1 t c2 i2},
+                          deqR c1 i1 t -> deqR c2 i2 t ->
+                          c1 = c2 /\ i1 = i2.
+  Proof.
+    intros c1 i1 t c2 i2 deq1 deq2.
+    unfold deqR in *.
+    destruct (trans oneBeh t);
+      solve [
+          repeat match goal with
+                   | [d: _ /\ _ |- _] => destruct d
+                 end;
+          rewrite <- H1 in *; rewrite <- H in *;
+          rewrite <- H2; rewrite <- H0;
+          intuition| intuition].
   Qed.
 
   Theorem incReqImpDeq: forall {c t i},
@@ -372,5 +332,4 @@ Module mkL1Axioms : L1Axioms mkDataTypes.
     intuition.
     intuition.
   Qed.
-
 End mkL1Axioms.

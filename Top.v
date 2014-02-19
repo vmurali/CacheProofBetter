@@ -2,251 +2,191 @@ Require Import DataTypes L1 StoreAtomicity LatestValue Cache Channel Compatible
 Rules ChannelAxiom L1Axioms CompatBehavior LatestValueAxioms BehaviorAxioms MsiState.
 
 Module mkTop.
-  Module dt := mkDataTypes.
   Module l1 := mkL1Axioms.
   Module ch' := mkChannel.
-  Module ch := mkChannelPerAddr dt ch'.
+  Module ch := mkChannelPerAddr mkDataTypes ch'.
   Module comp := mkCompatBehavior ch.
   Module lv := mkLatestValueAxioms ch.
   Module ba := mkBehaviorAxioms.
-  Module l1T := LatestValueTheorems dt ch ba l1 comp lv.
-  Module l1In := mkL1InputTypes dt l1.
-  Module mkStoreAtomicity: StoreAtomicity dt l1In.
-    Import dt l1 l1In l1T.
+  Module l1T := LatestValueTheorems mkDataTypes ch ba l1 comp lv.
+  Module mkStoreAtomicity: StoreAtomicity mkDataTypes.
+    Import mkDataTypes l1 l1T.
+
+
+    Definition respFn t :=
+      match deqOrNot t with
+        | inleft pf =>
+          match pf with
+            | exist (c,i) _ =>
+              Some (Build_Resp c i
+                               match desc (reqFn c i) with
+                                 | Ld => data c (loc (reqFn c i)) t
+                                 | St => initData zero
+                               end)
+          end
+        | inright _ => None
+      end.
+
+    Ltac finish := repeat match goal with
+                            | [s: {_|_} |- _] => destruct s
+                            | [x: (_ * _)%type |- _] => destruct x
+                          end; simpl in *.
+
     Theorem uniqRespLabels:
-      forall {r1 r2}, labelR r1 = labelR r2 ->
-                      timeR r1 = timeR r2 /\
-                      desc (reqFn (fst (labelR r1)) (snd (labelR r1))) = Ld ->
-                      dataR r1 = dataR r2.
+      forall {t1 t2}, match respFn t1, respFn t2 with
+                        | Some (Build_Resp c1 i1 _), Some (Build_Resp c2 i2 _) =>
+                          c1 = c2 -> i1 = i2 -> t1 = t2
+                        | _, _ => True
+                      end.
     Proof.
-      intros r1 r2 lEq.
-      destruct r1; destruct r2; simpl in *.
-      destruct labelR0; destruct labelR1.
-      injection lEq as c_eq i_eq.
-      rewrite <- c_eq in *; rewrite <- i_eq in *; clear lEq c_eq i_eq.
-      destruct defR0; destruct defR1; simpl in *.
-      pose proof (enqLdImpDeq e) as [q1 [f1 v1]]; pose proof (enqLdImpDeq e0) as [q2 [f2 v2]].
-      pose proof (uniqDeqProc2 q1 q2) as H; rewrite H in *.
-      rewrite v1 in v2; intuition.
-      pose proof (enqLdImpDeq e) as [q1 [f1 v1]]; pose proof (enqStImpDeq e0) as [q2 f2].
-      rewrite f1 in f2; discriminate.
-      pose proof (enqLdImpDeq e0) as [q1 [f1 v1]]; pose proof (enqStImpDeq e) as [q2 f2].
-      rewrite f1 in f2; discriminate.
-      pose proof (enqStImpDeq e0) as [q1 f1]; pose proof (enqStImpDeq e) as [q2 f2].
-      pose proof (uniqDeqProc2 q1 q2) as H; rewrite H in *.
-      intuition.
-      rewrite f2 in H2; discriminate.
-    Qed.
-
-  Theorem uniqRespTimes:
-    forall {r1 r2}, timeR r1 = timeR r2 ->
-                    loc (reqFn (fst (labelR r1)) (snd (labelR r1))) =
-                         loc (reqFn (fst (labelR r2)) (snd (labelR r2))) ->
-                    desc (reqFn (fst (labelR r1)) (snd (labelR r1))) = St ->
-                    labelR r1 = labelR r2.
-    Proof.
-      intros r1 r2 tEq addrEq dSt.
-      destruct r1; destruct r2; simpl in *.
-      destruct labelR0; destruct labelR1.
-      rewrite tEq in *; clear tEq.
-      destruct defR0.
-      pose proof (enqLdImpDeq e) as [q1 [f1 v1]].
-      simpl in dSt.
-      rewrite f1 in dSt; discriminate.
-      pose proof (enqStImpDeq e) as [q1 _].
-      pose proof (processDeq q1) as sth.
-      simpl in sth.
-      simpl in dSt.
-      rewrite dSt in sth.
-      destruct (decTree c c0).
-      rewrite <- e0 in *; clear e0.
-      destruct defR1.
-      pose proof (enqLdImpDeq e0) as [q2 _].
-      pose proof (uniqDeqProc q1 q2) as H.
-      rewrite <- H in *.
-      reflexivity.
-      pose proof (enqStImpDeq e0) as [q2 _].
-      pose proof (uniqDeqProc q1 q2) as H.
-      rewrite <- H in *.
-      reflexivity.
-      pose proof (deqLeaf q1) as l1.
-      pose proof (deqDef q1) as d1.
-
-      destruct defR1.
-
-      pose proof (enqLdImpDeq e0) as [q2 _].
-      pose proof (deqLeaf q2) as l2.
-      pose proof (deqDef q2) as d2.
-      pose proof (uniqM d1 l1 sth d2 l2 n) as stIn.
-      pose proof (processDeq q2) as sth2.
-      simpl in sth2.
-      simpl in addrEq.
-      rewrite <- addrEq in sth2.
-      rewrite stIn in sth2.
-      destruct (desc (reqFn c0 i0)).
-      intuition.
-      discriminate.
-
-      pose proof (enqStImpDeq e0) as [q2 _].
-      pose proof (deqLeaf q2) as l2.
-      pose proof (deqDef q2) as d2.
-      pose proof (uniqM d1 l1 sth d2 l2 n) as stIn.
-      pose proof (processDeq q2) as sth2.
-      simpl in sth2.
-      simpl in addrEq.
-      rewrite <- addrEq in sth2.
-      rewrite stIn in sth2.
-      destruct (desc (reqFn c0 i0)).
-      intuition.
-      discriminate.
+      intros t1 t2; unfold respFn;
+      destruct (deqOrNot t1); destruct (deqOrNot t2);
+      solve [finish; intros H H0; rewrite <- H in *; rewrite <- H0 in *;
+             apply (uniqDeqProc2 d0 d) |
+             finish; intuition | 
+             intuition].
     Qed.
 
     Theorem localOrdering:
-      forall {r1 r2}, fst (labelR r1) = fst (labelR r2) ->
-                      snd (labelR r1) < snd (labelR r2) -> ~ timeR r1 > timeR r2.
+      forall {t1 t2}, match respFn t1, respFn t2 with
+                        | Some (Build_Resp c1 i1 _), Some (Build_Resp c2 i2 _) =>
+                          c1 = c2 -> i1 < i2 -> t1 < t2
+                        | _, _ => True
+                      end.
     Proof.
-      unfold not; intros r1 r2 pEq lblLt tLt.
-      destruct r1; destruct r2; simpl in *.
-      destruct labelR0; destruct labelR1; simpl in *.
-      rewrite pEq in *; clear pEq.
-
-      destruct defR0; destruct defR1.
-
-      pose proof (enqLdImpDeq e) as [d1 _].
-      pose proof (enqLdImpDeq e0) as [d2 _].
-      apply (deqOrder d1 d2 lblLt tLt).
-      
-      pose proof (enqLdImpDeq e) as [d1 _].
-      pose proof (enqStImpDeq e0) as [d2 _].
-      apply (deqOrder d1 d2 lblLt tLt).
-
-      pose proof (enqStImpDeq e) as [d1 _].
-      pose proof (enqLdImpDeq e0) as [d2 _].
-      apply (deqOrder d1 d2 lblLt tLt).
-
-      pose proof (enqStImpDeq e) as [d1 _].
-      pose proof (enqStImpDeq e0) as [d2 _].
-      apply (deqOrder d1 d2 lblLt tLt).
+      intros t1 t2; unfold respFn;
+      destruct (deqOrNot t1); destruct (deqOrNot t2).
+      finish.
+      intros H H0.
+      rewrite H in *.
+      pose proof (deqOrder d0 d H0).
+      unfold Time in *.
+      assert (opts: t1 = t2 \/ t1 < t2) by omega.
+      destruct opts as [e1 | e2].
+      rewrite e1 in *.
+      pose proof (uniqDeqProc d d0); omega.
+      assumption.
+      finish.
+      intuition.
+      intuition.
+      intuition.
     Qed.
 
     Theorem allPrevious:
-      forall {r1 i}, i < snd (labelR r1) -> exists r2, fst (labelR r2) = fst (labelR r1) /\
-                                                       snd (labelR r2) = i.
+      forall {t2}, match respFn t2 with
+                     | Some (Build_Resp c2 i2 _) =>
+                       forall {i1}, i1 < i2 -> exists t1, match respFn t1 with
+                                                            | Some (Build_Resp c1 i _) =>
+                                                              c1 = c2 /\ i = i1
+                                                            | None => False
+                                                          end
+                     | _ => True
+                   end.
     Proof.
-      intros r1 i i_lt_r1t.
-      destruct r1.
-      destruct labelR0.
-      simpl in *.
-      destruct defR0.
-
-      pose proof (enqLdImpDeq e) as [deq _].
-      pose proof (deqImpDeqBefore deq i_lt_r1t) as [t' deq2].
-      pose proof (deqImpEnq deq2) as stf.
-      destruct (desc (reqFn c i)).
-      exists (Build_RespSet (c,i) (mkDataTypes.data c (loc (reqFn c i)) t') t'
-                            (inl stf)).
-      simpl; intuition.
-      exists (Build_RespSet (c,i) (initData zero) t' (inr stf)).
-      simpl; intuition.
-
-      pose proof (enqStImpDeq e) as [deq _].
-      pose proof (deqImpDeqBefore deq i_lt_r1t) as [t' deq2].
-      pose proof (deqImpEnq deq2) as stf.
-      destruct (desc (reqFn c i)).
-      exists (Build_RespSet (c,i) (mkDataTypes.data c (loc (reqFn c i)) t') t'
-                            (inl stf)).
-      simpl; intuition.
-      exists (Build_RespSet (c,i) (initData zero) t' (inr stf)).
-      simpl; intuition.
+      intro t2; unfold respFn.
+      destruct (deqOrNot t2).
+      finish.
+      intros i1 cond.
+      pose proof (deqImpDeqBefore d cond) as [t' deq2].
+      exists t'.
+      destruct (deqOrNot t').
+      finish.
+      apply (uniqDeqProc3 d0 deq2).
+      apply (n _ _ deq2).
+      intuition.
     Qed.
 
     Theorem storeAtomicity:
-      forall {r},
-        let q := reqFn (fst (labelR r)) (snd (labelR r)) in
-        desc q = Ld ->
-        (dataR r = initData (loc q) /\
-         forall {r'}, let q' := reqFn (fst (labelR r')) (snd (labelR r')) in
-                      0 <= timeR r' < timeR r -> ~ (loc q' = loc q /\ desc q' = St)) \/
-        (exists rm,
-           let qm := reqFn (fst (labelR rm)) (snd (labelR rm)) in
-           dataR r = dataQ qm /\
-           timeR rm < timeR r /\ loc qm = loc q /\ desc qm = St /\
-           forall {r'}, let q' := reqFn (fst (labelR r')) (snd (labelR r')) in
-                        timeR rm < timeR r' < timeR r -> ~ (loc q' = loc q /\ desc q' = St)).
+      forall {t},
+        match respFn t with
+          | Some (Build_Resp c i d) =>
+            let (a, descQ, dtQ) := reqFn c i in
+            match descQ with
+              | Ld =>
+                (d = initData a /\
+                 forall t', t' < t ->
+                            match respFn t' with
+                              | Some (Build_Resp c' i' d') =>
+                                let (a', descQ', dtQ') := reqFn c' i' in
+                                a' = a -> descQ' = St -> False
+                              | _ => True
+                            end) \/
+                (exists tm,
+                   tm < t /\
+                   match respFn tm with
+                     | Some (Build_Resp cm im dm) =>
+                       let (am, descQm, dtQm) := reqFn cm im in
+                       d = dtQm /\ am = a /\ descQm = St /\
+                       forall t', tm < t' < t ->
+                                  match respFn t' with
+                                    | Some (Build_Resp c' i' d') =>
+                                      let (a', descQ', dtQ') := reqFn c' i' in
+                                      a' = a -> descQ' = St -> False
+                                    | _ => True
+                                  end
+                     | _ => False
+                   end)
+              | St => d = initData zero 
+            end
+          | _ => True
+        end.
     Proof.
-      intros r q isLd.
-      unfold q in *; clear q.
-      destruct r; destruct labelR0; simpl in *.
-      destruct defR0.
-
-      pose proof (enqLdImpDeq e) as [d1 [f1 v1]].
-
-      assert (cond: sle Sh (state c (loc (reqFn c i)) timeR0)).
-      pose proof (processDeq d1) as sth.
-      simpl in sth.
-      rewrite f1 in sth.
-      destruct (state c (loc (reqFn c i)) timeR0); unfold sle; auto.
-
-      pose proof (deqLeaf d1) as l1.
-      pose proof (deqDef d1) as def1.
-      pose proof (latestValue def1 l1 cond) as sth.
-      rewrite v1 in *.
-
-      destruct sth.
-
+      intros t.
+      unfold respFn.
+      destruct (deqOrNot t).
+      finish.
+      pose proof (processDeq d) as procD.
+      destruct (reqFn c i); simpl.
+      simpl in *.
+      destruct desc.
+      pose proof (deqLeaf d) as lf.
+      pose proof (deqDef d) as def.
+      assert (le: sle Sh (state c loc t)) by
+          (unfold sle; destruct (state c loc t); auto).
+      pose proof (latestValue def lf le) as lv.
+      destruct lv as [[dtMatch noPrev]|prev].
       left.
+      constructor; intuition.
+      destruct (deqOrNot t').
+      finish.
+      pose proof (deqDef d0) as def0.
+      assert (cond: 0 <= t' < t) by omega.
+      specialize (noPrev _ cond _ i0 def0).
+      destruct (reqFn c0 i0).
+      intros; simpl in *.
+      intuition.
+      intuition.
+      right.
+      destruct prev as [cb [ib [tb [defcb [tb_lt_t [deq_tb [isSt [locM [dtM rest]]]]]]]]].
+      exists tb.
       constructor.
       intuition.
-      unfold not; intros r' cond1 [addrEq isSt].
-      destruct r'; destruct labelR0; simpl in *.
-
-      destruct H as [_ H].
-      destruct defR0.
-      pose proof (enqLdImpDeq e0) as [deq1 _].
-      pose proof (deqDef deq1) as df1.
-      specialize (H timeR1 cond1 c0 i0 df1).
-      generalize H addrEq isSt deq1; clear; intuition.
-
-      pose proof (enqStImpDeq e0) as [deq1 _].
-      pose proof (deqDef deq1) as df1.
-      specialize (H timeR1 cond1 c0 i0 df1).
-      generalize H addrEq isSt deq1; clear; intuition.
-
-
-      right.
-      destruct H as [cb [ib [tb [defcb [tb_lt [deqcb [isSt [dtEq rest]]]]]]]].
-      pose proof (deqImpEnq deqcb) as sth.
-      rewrite isSt in sth.
-      exists (Build_RespSet (cb, ib) dataR0 tb (inr sth)); simpl in *.
+      destruct (deqOrNot tb).
+      finish.
+      pose proof (uniqDeqProc3 deq_tb d0) as [ceq ieq].
+      rewrite <- ceq in *; rewrite <- ieq in *.
+      destruct (reqFn cb ib); simpl in *.
       constructor. intuition.
       constructor. intuition.
       constructor. intuition.
-      constructor. intuition.
+      intros t' cond.
+      destruct (deqOrNot t').
+      finish.
+      pose proof (deqDef d1) as defdeq.
+      specialize (rest _ cond _ i1 defdeq).
+      destruct (reqFn c1 i1); simpl in *.
+      generalize rest d1; clear; intuition.
 
-      unfold not; intros r' cond1 [addrEq isSt'].
-      destruct r'; destruct labelR0; simpl in *.
+      intuition.
 
-      destruct rest as [_ rest].
-      destruct defR0.
-      pose proof (enqLdImpDeq e0) as [deq1 _].
-      pose proof (deqDef deq1) as df1.
-      specialize (rest timeR1 cond1 c0 i0 df1).
-      generalize rest deq1 addrEq isSt'; clear; intuition.
-
-      pose proof (enqStImpDeq e0) as [deq1 _].
-      pose proof (deqDef deq1) as df1.
-      specialize (rest timeR1 cond1 c0 i0 df1).
-      generalize rest deq1 addrEq isSt'; clear; intuition.
-
-
-
-      pose proof (enqStImpDeq e) as [d1 f1].
-      rewrite isLd in f1; discriminate.
+      apply (n _ _ deq_tb).
+      intuition.
+      intuition.
     Qed.
 
     Print Assumptions uniqRespLabels.
-    Print Assumptions uniqRespTimes.
     Print Assumptions localOrdering.
+    Print Assumptions allPrevious.
     Print Assumptions storeAtomicity.
   End mkStoreAtomicity.
 End mkTop.

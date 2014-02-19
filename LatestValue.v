@@ -39,7 +39,7 @@ Module Type LatestValueAxioms (dt: DataTypes) (ch: ChannelPerAddr dt).
 End LatestValueAxioms.
 
 Module LatestValueTheorems (dt: DataTypes) (ch: ChannelPerAddr dt) (c: BehaviorAxioms dt ch)
-       (l1: L1Axioms dt) (comp: CompatBehavior dt ch) (lv: LatestValueAxioms dt ch): L1Theorems dt.
+       (l1: L1Axioms dt) (comp: CompatBehavior dt ch) (lv: LatestValueAxioms dt ch): L1Theorems dt l1.
   Module mbt := mkBehaviorTheorems dt ch c.
   Module cbt := mkCompat dt ch comp c.
   Import dt ch c l1 comp lv mbt cbt.
@@ -680,4 +680,5 @@ Module LatestValueTheorems (dt: DataTypes) (ch: ChannelPerAddr dt) (c: BehaviorA
     assumption.
   Qed.
 
+  Definition deqOrNot := l1.deqOrNot.
 End LatestValueTheorems.

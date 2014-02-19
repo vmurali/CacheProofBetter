@@ -1,4 +1,4 @@
-Require Import DataTypes StoreAtomicityNew Case NamedTransProp Useful.
+Require Import DataTypes StoreAtomicity Case NamedTransProp Useful.
 
 Set Implicit Arguments.
 

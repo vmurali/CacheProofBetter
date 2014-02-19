@@ -55,6 +55,11 @@ Record Req := { loc: Addr;
                 dataQ: Data
               }.
 
+Record Resp := { proc: Cache;
+                 idx: Index;
+                 datum: Data
+               }.
+
 Parameter reqFn: Cache -> Index -> Req.
 Parameter initData: Addr -> Data.
 
@@ -70,8 +75,6 @@ Module Type DataTypes.
   Parameter dwaitS: Cache -> Cache -> Addr -> Time -> State.
 
   Parameter deqR: Cache -> Index -> Time -> Prop.
-  Parameter enqLd: Cache -> Index -> Data -> Time -> Prop.
-  Parameter enqSt: Cache -> Index -> Time -> Prop.
 
   Parameter mark: ChannelType -> Cache -> Cache -> Time -> Mesg -> Prop.
   Parameter send: ChannelType -> Cache -> Cache -> Time -> Mesg -> Prop.

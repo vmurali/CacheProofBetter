@@ -599,18 +599,4 @@ Module mkDataTypes <: DataTypes.
                                      ca = c /\ req (sys oneBeh t) c = i
                                    | _ => False
                                  end.
-
-  Definition enqLd c i sl t := match (trans oneBeh) t with
-                                 | LoadReq ca _ _ _ _ =>
-                                   ca = c /\ req (sys oneBeh t) c = i /\
-                                   dt (sys oneBeh t) c (loc (reqFn c i)) = sl
-                                 | _ => False
-                               end.
-
-  Definition enqSt c i t := match (trans oneBeh) t with
-                              | StoreReq ca _ _ _ _ =>
-                                ca = c /\ req (sys oneBeh t) c = i
-                              | _ => False
-                            end.
-  
 End mkDataTypes.
