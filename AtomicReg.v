@@ -1,4 +1,4 @@
-Require Import DataTypes StoreAtomicityNew Case NamedTransProp.
+Require Import DataTypes StoreAtomicityNew Case NamedTransProp Useful.
 
 Set Implicit Arguments.
 
@@ -192,6 +192,167 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
       specialize (sth2 c); assert False by omega; intuition.
     Qed.
 
+    Definition latestAtomValue t a :=
+        (mem (getTransState getTransNext t) a = initData a /\
+           forall t', t' < t ->
+                      match getTrans getTransNext t' with
+                        | Req c' =>
+                            let (a', descQ', dtQ') :=
+                                reqFn c' (next (getTransState getTransNext t') c') in
+                              a' = a -> descQ' = St -> False
+                        | _ => True
+                      end) \/
+        (exists tm,
+           tm < t /\
+              match getTrans getTransNext tm with
+                | Req cm =>
+                    let (am, descQm, dtQm) :=
+                        reqFn cm (next (getTransState getTransNext tm) cm) in
+                      mem (getTransState getTransNext t) a = dtQm /\
+                           am = a /\ descQm = St /\
+                           forall t', tm < t' < t ->
+                             match getTrans getTransNext t' with
+                               | Req c' =>
+                                   let (a', descQ', dtQ') :=
+                                       reqFn c' (next (getTransState getTransNext t') c') in
+                                     a' = a -> descQ' = St -> False
+                               | _ => True
+                             end
+                | _ => False
+              end).
+
+    Theorem latestAtomValueHolds t a: latestAtomValue t a.
+    Proof.
+      induction t.
+
+      Case "0".
+      left; constructor; [| intros t' contra; assert False by omega]; intuition.
+
+      Case "S t".
+      unfold latestAtomValue in *.
+      unfold getTransState at 1 4.
+      unfold getTransList;
+        fold (getTransList getTransNext t); simpl.
+      unfold getTransState in IHt at 1 4.
+      destruct (getTrans getTransNext t); simpl.
+      destruct (desc (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c))); simpl.
+      destruct IHt as [[memEq noBefore]|some].
+      About forallNext.
+      pose proof (forallNext noBefore).
+      About existsNext.
+      pose proof (existsNext (exists tm : nat,
+           tm < t /\
+           match getTrans getTransNext tm with
+           | Req cm =>
+               let (am, descQm, dtQm) :=
+                   reqFn cm (next (getTransState getTransNext tm) cm) in
+               mem (nextTransListSt (getTransList getTransNext t)) a = dtQm /\
+               am = a /\
+               descQm = St /\
+               (forall t' : nat,
+                tm < t' < t ->
+                match getTrans getTransNext t' with
+                | Req c' =>
+                    let (a', descQ', _) :=
+                        reqFn c' (next (getTransState getTransNext t') c') in
+                    a' = a -> descQ' = St -> False
+                | Idle => True
+                end)
+           | Idle => False
+           end))).
+      Hint Resolve existsNext.
+      eauto.
+      intuition.
+      left.
+      constructor.
+      destruct IHt as [u1 u2].
+      intuition.
+      destruct (desc (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c))).
+      destruct (desc (
+
+      destruct IHt as [noBefore|someBefore].
+      unfold getTransState at 1.
+      unfold getTransList;
+        fold (getTransList getTransNext t); simpl.
+
+      remember (getTransNext (nextTransListTrans (getTransList getTransNext t))) as trans.
+      destruct (nextTrans trans); simpl.
+
+      SCase "Req".
+
+      remember (desc (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c))) as op.
+      destruct op; simpl.
+
+      SSCase "Ld".
+      constructor.
+      intuition.
+
+      assert (opts: t' < t \/ t' = t) by omega.
+      destruct opts as [lt|eq].
+      apply (H1 _ lt).
+
+      rewrite eq.
+      unfold getTrans.
+      rewrite <- Heqtrans.
+      destruct (nextTrans trans).
+
+      destruct 
+      destruct nextTrans; simpl in *.
+
+      
+      remember (getTrans getTransNext t) as sth.
+      destruct sth.
+      destruct (nextTrans (getTransNext (nextTransListTrans (getTransList getTransNext t)))); simpl.
+
+      SSCase "Req".
+      destruct (desc (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c))).
+
+      SSSCase "Ld".
+
+      left.
+      constructor.
+      intuition.
+      constructor.
+
+      simpl.
+
+      intuition.
+
+      SSSCase "St".
+      simpl.
+      simpl.
+      unfold getTrans.
+      remember (nextTrans (getTransNext (nextTransListTrans (getTransList getTransNext t)))) as sth.
+      destruct (nextTrans (getTransNext (nextTransListTrans (getTransList getTransNext t)))).
+      simpl in *.
+
+      destruct (desc (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c))).
+      SSCase "ld".
+      destruct whichOp.
+      destruct H as [u1 u2].
+      constructor.
+      intuition.
+      intros t' cond.
+      assert (opts: t' < t \/ t' = t) by omega.
+      destruct opts as [ez|hard].
+      apply (u2 _ ez).
+      rewrite hard.
+      rewrite <- HeqwhichOp. 
+      assumption.
+      assumptiounfold getTransState at 1 in IHt.
+      simpl.unfold getTransNext.
+      unfold getTransState at 1 in IHt.
+      simpl.
+      Print NextTransList.
+      destruct (nexTransListTrans 
+      simpl.
+      destruct (getTrans getTransNext t).
+      auto.
+      intros t' contra;
+        assert False by omega; intuition.
+      unfold getTransState.
+
+
     Theorem storeAtomicityAtom:
       forall t,
         match getTrans getTransNext t with
@@ -226,14 +387,14 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
                                   end
                      | _ => False
                    end)
-              | St => mem (getTransState getTransNext t) a = initData zero 
+              | St => True 
             end
           | _ => True
         end.
     Proof.
       admit.
     Qed.
-
+*)
   End SomeList.
 
   Definition atomicResp s s' (t: AtomicTrans s s') :=

@@ -1,5 +1,29 @@
 Require Import Arith Omega Coq.Logic.Classical List.
 
+Section Use.
+  Context {R : nat -> Prop}.
+  Set Implicit Arguments.
+
+  Theorem forallNext max: (forall t, t < max -> R t) ->
+                          R max -> forall t, t < S max -> R t.
+  Proof.
+    intros prev rmax t cond.
+    assert (opts: t = max \/ t < max) by omega.
+    destruct opts.
+    rewrite H; intuition.
+    auto.
+  Qed.
+
+  Theorem existsNext max t (cond: t < max) (rt: R t):
+                          exists t, t < S max /\ R t.
+  Proof.
+    exists t.
+    assert (t < S max) by omega; intuition.
+  Qed.
+
+  Unset Implicit Arguments.
+End Use.
+    
 Section minExists.
   Context {P : nat -> Prop}.
   Lemma leastOrNone x :
