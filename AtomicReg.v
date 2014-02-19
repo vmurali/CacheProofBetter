@@ -143,7 +143,7 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
       intuition.
     Qed.
 
-    Lemma allAtomPrev t c i:
+    Theorem allAtomPrev t c i:
       next (getTransState getTransNext t) c > i ->
       exists t', t' < t /\ match getTrans getTransNext t' with
                              | Req c' => c = c' /\ next (getTransState getTransNext t') c' = i
@@ -192,36 +192,100 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
       specialize (sth2 c); assert False by omega; intuition.
     Qed.
 
+    Definition noCurrAtomStore t a :=
+      match getTrans getTransNext t with
+        | Req c' =>
+          let (a', descQ', dtQ') :=
+              reqFn c' (next (getTransState getTransNext t) c') in
+          a' = a -> descQ' = St -> False
+        | _ => True
+      end.
+
+    Definition noAtomStore tl t a :=
+      forall t', tl <= t' < t -> noCurrAtomStore t' a.
+
+    Definition matchAtomStore cm tm t a :=
+      let (am, descQm, dtQm) :=
+          reqFn cm (next (getTransState getTransNext tm) cm) in
+      mem (getTransState getTransNext t) a = dtQm /\
+      am = a /\ descQm = St.
+
+    Definition lastMatchAtomStore tm t a :=
+      match getTrans getTransNext tm with
+        | Req cm => matchAtomStore cm tm t a /\
+                    noAtomStore (S tm) t a
+        | _ => False
+      end.
+
     Definition latestAtomValue t a :=
         (mem (getTransState getTransNext t) a = initData a /\
-           forall t', t' < t ->
-                      match getTrans getTransNext t' with
-                        | Req c' =>
-                            let (a', descQ', dtQ') :=
-                                reqFn c' (next (getTransState getTransNext t') c') in
-                              a' = a -> descQ' = St -> False
-                        | _ => True
-                      end) \/
+         noAtomStore 0 t a) \/
         (exists tm,
-           tm < t /\
-              match getTrans getTransNext tm with
-                | Req cm =>
-                    let (am, descQm, dtQm) :=
-                        reqFn cm (next (getTransState getTransNext tm) cm) in
-                      mem (getTransState getTransNext t) a = dtQm /\
-                           am = a /\ descQm = St /\
-                           forall t', tm < t' < t ->
-                             match getTrans getTransNext t' with
-                               | Req c' =>
-                                   let (a', descQ', dtQ') :=
-                                       reqFn c' (next (getTransState getTransNext t') c') in
-                                     a' = a -> descQ' = St -> False
-                               | _ => True
-                             end
-                | _ => False
-              end).
+           tm < t /\ lastMatchAtomStore tm t a).
 
-    Theorem latestAtomValueHolds t a: latestAtomValue t a.
+    Definition atomNoPrevNonSt t a :=
+      noAtomStore 0 t a /\
+      mem (getTransState getTransNext (S t)) a = initData a /\
+      noCurrAtomStore t a.
+
+    Definition atomPrevNonSt t a :=
+      (exists tm,
+         tm < t /\
+         match getTrans getTransNext tm with
+           | Req cm => matchAtomStore cm tm (S t) a /\
+                       noAtomStore (S tm) t a
+           | _ => False
+         end) /\
+      noCurrAtomStore t a.
+
+    Definition atomSt t a :=
+      lastMatchAtomStore t (S t) a.
+
+    Lemma latestAtomInd t a (now: atomNoPrevNonSt t a \/ atomPrevNonSt t a \/ atomSt t a):
+      latestAtomValue (S t) a.
+    Proof.
+      unfold latestAtomValue.
+      destruct now as [noPrevNonSt | [prevNonSt | st]].
+
+      Case "noPrevNonSt".
+      unfold atomNoPrevNonSt in *.
+      left.
+      constructor.
+      intuition.
+      unfold noAtomStore in *.
+      intros t' cond.
+      assert (opts: 0 <= t' < t \/ t' = t) by omega.
+      destruct opts as [done | eq]; [| rewrite eq]; intuition.
+
+      Case "prevNonSt".
+      right.
+      unfold atomPrevNonSt in *.
+      destruct prevNonSt as [[tm [cond lm]] noCurr].
+      exists tm.
+      constructor.
+      omega.
+      unfold lastMatchAtomStore in *.
+      destruct (getTrans getTransNext tm).
+      constructor.
+      intuition.
+      unfold noAtomStore.
+      intros t' cond2.
+      assert (opts: S tm <= t' < t \/ t' = t) by omega.
+      destruct opts as [ez|ez2].
+      intuition.
+      rewrite ez2 in *; intuition.
+      intuition.
+
+      Case "st".
+      right.
+      unfold atomSt in st.
+      exists t.
+      constructor.
+      omega.
+      intuition.
+    Qed.
+
+    Lemma latestAtomValueHolds t a: latestAtomValue t a.
     Proof.
       induction t.
 
@@ -229,128 +293,63 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
       left; constructor; [| intros t' contra; assert False by omega]; intuition.
 
       Case "S t".
-      unfold latestAtomValue in *.
-      unfold getTransState at 1 4.
-      unfold getTransList;
-        fold (getTransList getTransNext t); simpl.
-      unfold getTransState in IHt at 1 4.
-      destruct (getTrans getTransNext t); simpl.
-      destruct (desc (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c))); simpl.
-      destruct IHt as [[memEq noBefore]|some].
-      About forallNext.
-      pose proof (forallNext noBefore).
-      About existsNext.
-      pose proof (existsNext (exists tm : nat,
-           tm < t /\
-           match getTrans getTransNext tm with
-           | Req cm =>
-               let (am, descQm, dtQm) :=
-                   reqFn cm (next (getTransState getTransNext tm) cm) in
-               mem (nextTransListSt (getTransList getTransNext t)) a = dtQm /\
-               am = a /\
-               descQm = St /\
-               (forall t' : nat,
-                tm < t' < t ->
-                match getTrans getTransNext t' with
-                | Req c' =>
-                    let (a', descQ', _) :=
-                        reqFn c' (next (getTransState getTransNext t') c') in
-                    a' = a -> descQ' = St -> False
-                | Idle => True
-                end)
-           | Idle => False
-           end))).
-      Hint Resolve existsNext.
-      eauto.
-      intuition.
-      left.
-      constructor.
-      destruct IHt as [u1 u2].
-      intuition.
-      destruct (desc (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c))).
-      destruct (desc (
+      apply latestAtomInd.
 
-      destruct IHt as [noBefore|someBefore].
-      unfold getTransState at 1.
-      unfold getTransList;
-        fold (getTransList getTransNext t); simpl.
+      unfold latestAtomValue in IHt.
+      unfold lastMatchAtomStore in IHt.
+      unfold atomNoPrevNonSt.
+      unfold noCurrAtomStore.
+      unfold atomPrevNonSt.
+      unfold matchAtomStore in *.
+      unfold noCurrAtomStore.
 
-      remember (getTransNext (nextTransListTrans (getTransList getTransNext t))) as trans.
-      destruct (nextTrans trans); simpl.
+      unfold atomSt.
+      unfold lastMatchAtomStore.
+      unfold matchAtomStore.
+      unfold noAtomStore.
+
+      unfold getTransState at 1 3 in IHt.
+      unfold getTransState at 1 2 4 5 6 7.
+      unfold getTrans at 1 3 4.
+      unfold getTransList; 
+        fold (getTransList getTransNext t); simpl.
+      destruct (nextTrans (getTransNext (nextTransListTrans (getTransList getTransNext t))));
+        simpl in *.
 
       SCase "Req".
-
-      remember (desc (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c))) as op.
-      destruct op; simpl.
+      destruct (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c)); simpl.
+      destruct desc.
 
       SSCase "Ld".
-      constructor.
-      intuition.
+      destruct IHt.
 
-      assert (opts: t' < t \/ t' = t) by omega.
-      destruct opts as [lt|eq].
-      apply (H1 _ lt).
-
-      rewrite eq.
-      unfold getTrans.
-      rewrite <- Heqtrans.
-      destruct (nextTrans trans).
-
-      destruct 
-      destruct nextTrans; simpl in *.
-
-      
-      remember (getTrans getTransNext t) as sth.
-      destruct sth.
-      destruct (nextTrans (getTransNext (nextTransListTrans (getTransList getTransNext t)))); simpl.
-
-      SSCase "Req".
-      destruct (desc (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c))).
-
-      SSSCase "Ld".
-
+      SSSCase "NoPrev".
       left.
-      constructor.
       intuition.
-      constructor.
+      discriminate.
 
-      simpl.
-
+      SSSCase "Prev".
+      right; left.
+      destruct (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c)).
       intuition.
+      discriminate.
 
-      SSSCase "St".
-      simpl.
-      simpl.
-      unfold getTrans.
-      remember (nextTrans (getTransNext (nextTransListTrans (getTransList getTransNext t)))) as sth.
-      destruct (nextTrans (getTransNext (nextTransListTrans (getTransList getTransNext t)))).
-      simpl in *.
+      SSCase "St".
+      destruct (decAddr a loc).
 
-      destruct (desc (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c))).
-      SSCase "ld".
-      destruct whichOp.
-      destruct H as [u1 u2].
+      SSSCase "addr match".
+      right; right.
       constructor.
-      intuition.
-      intros t' cond.
-      assert (opts: t' < t \/ t' = t) by omega.
-      destruct opts as [ez|hard].
-      apply (u2 _ ez).
-      rewrite hard.
-      rewrite <- HeqwhichOp. 
-      assumption.
-      assumptiounfold getTransState at 1 in IHt.
-      simpl.unfold getTransNext.
-      unfold getTransState at 1 in IHt.
-      simpl.
-      Print NextTransList.
-      destruct (nexTransListTrans 
-      simpl.
-      destruct (getTrans getTransNext t).
       auto.
-      intros t' contra;
-        assert False by omega; intuition.
-      unfold getTransState.
+      intros t' contra.
+      assert False by omega; intuition.
+
+      SSSCase "addr no match".
+      destruct IHt; intuition.
+
+      SCase "Idle".
+      destruct IHt; intuition.
+    Qed.
 
 
     Theorem storeAtomicityAtom:
@@ -359,42 +358,21 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
           | Req c =>
             let (a, descQ, dtQ) := reqFn c (next (getTransState getTransNext t) c) in
             match descQ with
-              | Ld =>
-                (mem (getTransState getTransNext t) a = initData a /\
-                 forall t', t' < t ->
-                            match getTrans getTransNext t' with
-                              | Req c' =>
-                                let (a', descQ', dtQ') :=
-                                    reqFn c' (next (getTransState getTransNext t') c') in
-                                a' = a -> descQ' = St -> False
-                              | _ => True
-                            end) \/
-                (exists tm,
-                   tm < t /\
-                   match getTrans getTransNext tm with
-                     | Req cm =>
-                       let (am, descQm, dtQm) :=
-                           reqFn cm (next (getTransState getTransNext tm) cm) in
-                       mem (getTransState getTransNext t) a = dtQm /\
-                       am = a /\ descQm = St /\
-                       forall t', tm < t' < t ->
-                                  match getTrans getTransNext t' with
-                                    | Req c' =>
-                                      let (a', descQ', dtQ') :=
-                                          reqFn c' (next (getTransState getTransNext t') c') in
-                                      a' = a -> descQ' = St -> False
-                                    | _ => True
-                                  end
-                     | _ => False
-                   end)
+              | Ld => latestAtomValue t a
               | St => True 
             end
           | _ => True
         end.
     Proof.
-      admit.
+      intros t.
+      pose proof (latestAtomValueHolds t).
+      destruct (getTrans getTransNext t).
+      destruct (reqFn c (next (getTransState getTransNext t) c)) as [a desc _].
+      destruct desc.
+      apply latestAtomValueHolds.
+      intuition.
+      intuition.
     Qed.
-*)
   End SomeList.
 
   Definition atomicResp s s' (t: AtomicTrans s s') :=
@@ -413,18 +391,31 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
   Definition AtomicList := TransList AtomicTrans (Build_State initData (fun t => 0))
                                      AtomicSim.
 
-  Theorem nextAtomicTrans n s (al: AtomicList n s): 
+  Fixpoint nextAtomicTrans n s (al: AtomicList n s): 
     @NextTrans State AtomicTrans AtomicSim n s.
   Proof.
     remember (respFn n) as actResp.
     destruct actResp.
     destruct r as [c i d].
 
-    pose (Req s c) as t.
-    assert (pf: AtomicSim n t).
-    unfold AtomicSim; unfold atomicResp; unfold t.
+    pose (Req s c) as tr.
+    assert (pf: AtomicSim n tr).
+    unfold AtomicSim; unfold atomicResp; unfold tr; unfold Index in *.
+    rewrite <- HeqactResp; f_equal; clear HeqactResp.
+    assert (opts: i = next s c \/ i < next s c \/ next s c < i) by omega.
+    destruct opts as [e1 | [e2 | e3]].
+    rewrite <- e1 in *.
+    destruct (reqFn c i) as [a op d']; simpl in *.
+    assert (dMatch: d = match op with
+                          | Ld => mem s a
+                          | St => initData zero
+                        end).
+    pose proof (latestAtomValue nextAtomicTrans i a) as use.
     admit.
 
+    rewrite <- dMatch; reflexivity.
+    admit.
+    admit.
     apply (Build_NextTrans _ _ _ _ _ _ pf).
 
     pose (Idle s) as t.
