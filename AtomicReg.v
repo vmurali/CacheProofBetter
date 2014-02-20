@@ -391,8 +391,6 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
       | None => Build_NextTrans _ _ _ (Idle s)
     end.
 
-  About getTrans.
-
   Theorem obeysP: forall n,
                     respFn n = atomicResp (getTrans nextAtomicTrans n).
   Proof.
