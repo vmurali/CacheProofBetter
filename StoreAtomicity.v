@@ -14,7 +14,7 @@ Module Type StoreAtomicity (dt: DataTypes).
   Axiom localOrdering:
     forall {t1 t2}, match respFn t1, respFn t2 with
                       | Some (Build_Resp c1 i1 _), Some (Build_Resp c2 i2 _) =>
-                        c1 = c2 -> i1 < i2 -> t1 < t2
+                        c1 = c2 -> i1 > i2 -> t1 > t2
                       | _, _ => True
                     end.
 

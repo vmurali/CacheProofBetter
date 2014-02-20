@@ -55,7 +55,7 @@ Record Req := { loc: Addr;
                 dataQ: Data
               }.
 
-Record Resp := { proc: Cache;
+Record Resp := { procR: Cache;
                  idx: Index;
                  datum: Data
                }.

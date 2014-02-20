@@ -50,7 +50,7 @@ Module mkTop.
     Theorem localOrdering:
       forall {t1 t2}, match respFn t1, respFn t2 with
                         | Some (Build_Resp c1 i1 _), Some (Build_Resp c2 i2 _) =>
-                          c1 = c2 -> i1 < i2 -> t1 < t2
+                          c1 = c2 -> i1 > i2 -> t1 > t2
                         | _, _ => True
                       end.
     Proof.
@@ -59,9 +59,9 @@ Module mkTop.
       finish.
       intros H H0.
       rewrite H in *.
-      pose proof (deqOrder d0 d H0).
+      pose proof (deqOrder d d0 H0).
       unfold Time in *.
-      assert (opts: t1 = t2 \/ t1 < t2) by omega.
+      assert (opts: t1 = t2 \/ t1 > t2) by omega.
       destruct opts as [e1 | e2].
       rewrite e1 in *.
       pose proof (uniqDeqProc d d0); omega.

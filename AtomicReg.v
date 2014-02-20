@@ -1,4 +1,4 @@
-Require Import DataTypes StoreAtomicity Case NamedTransProp Useful.
+Require Import DataTypes StoreAtomicity Case NamedTrans Useful.
 
 Set Implicit Arguments.
 
@@ -28,12 +28,10 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
   Import d s.
 
   Section SomeList.
-    Variable (P: nat -> forall s s', AtomicTrans s s' -> Prop).
+    Definition SomeList := TransList AtomicTrans (Build_State initData (fun t => 0)).
 
-    Definition SomeList := TransList AtomicTrans (Build_State initData (fun t => 0)) P.
-
-    Variable (getTransNext: forall n s, SomeList n s -> @NextTrans State AtomicTrans
-                                                                   P n s).
+    About NextTrans.
+    Variable (getTransNext: forall n s, SomeList n s -> NextTrans AtomicTrans s).
 
     Lemma nextLe t c: next (getTransState getTransNext t) c <=
                       next (getTransState getTransNext (S t)) c.
@@ -313,11 +311,11 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
       unfold getTrans at 1 3 4.
       unfold getTransList; 
         fold (getTransList getTransNext t); simpl.
-      destruct (nextTrans (getTransNext (nextTransListTrans (getTransList getTransNext t))));
+      destruct (trans (getTransNext (lTrans (getTransList getTransNext t))));
         simpl in *.
 
       SCase "Req".
-      destruct (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c)); simpl.
+      destruct (reqFn c (next (lSt (getTransList getTransNext t)) c)); simpl.
       destruct desc.
 
       SSCase "Ld".
@@ -330,7 +328,7 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
 
       SSSCase "Prev".
       right; left.
-      destruct (reqFn c (next (nextTransListSt (getTransList getTransNext t)) c)).
+      destruct (reqFn c (next (lSt (getTransList getTransNext t)) c)).
       intuition.
       discriminate.
 
@@ -385,61 +383,119 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
       | Idle => None
     end.
 
-  Definition AtomicSim n s s' (t: AtomicTrans s s') :=
-    respFn n = atomicResp t.
+  Definition AtomicList := TransList AtomicTrans (Build_State initData (fun t => 0)).
 
-  Definition AtomicList := TransList AtomicTrans (Build_State initData (fun t => 0))
-                                     AtomicSim.
-
-  Fixpoint nextAtomicTrans n s (al: AtomicList n s): 
-    @NextTrans State AtomicTrans AtomicSim n s.
-  Proof.
-    remember (respFn n) as actResp.
-    destruct actResp.
-    destruct r as [c i d].
-
-    pose (Req s c) as tr.
-    assert (pf: AtomicSim n tr).
-    unfold AtomicSim; unfold atomicResp; unfold tr; unfold Index in *.
-    rewrite <- HeqactResp; f_equal; clear HeqactResp.
-    assert (opts: i = next s c \/ i < next s c \/ next s c < i) by omega.
-    destruct opts as [e1 | [e2 | e3]].
-    rewrite <- e1 in *.
-    destruct (reqFn c i) as [a op d']; simpl in *.
-    assert (dMatch: d = match op with
-                          | Ld => mem s a
-                          | St => initData zero
-                        end).
-    pose proof (latestAtomValue nextAtomicTrans i a) as use.
-    admit.
-
-    rewrite <- dMatch; reflexivity.
-    admit.
-    admit.
-    apply (Build_NextTrans _ _ _ _ _ _ pf).
-
-    pose (Idle s) as t.
-    assert (pf: AtomicSim n t).
-    unfold AtomicSim; unfold atomicResp; unfold t;
-    auto.
-
-    apply (Build_NextTrans _ _ _ _ _ _ pf).
-  Qed.
-
-  About obeysP.
-
-  Definition atomicObeys :=
-    obeysP (@nextAtomicTrans).
-
-  About atomicObeys.
+  Definition nextAtomicTrans n s (al: AtomicList n s) :=
+    match respFn n with
+      | Some r => Build_NextTrans _ _ _ (Req s (procR r))
+      | None => Build_NextTrans _ _ _ (Idle s)
+    end.
 
   About getTrans.
-  About getTransState.
+
+  Theorem obeysP: forall n,
+                    respFn n = atomicResp (getTrans nextAtomicTrans n).
+  Proof.
+    apply strong_ind.
+    intros t prevEq.
+    unfold atomicResp.
+    pose proof (@uniqRespLabels t) as uniq.
+    pose proof (@allPrevious t) as allPrev.
+    pose proof (@localOrdering t) as lo.
+    unfold getTrans.
+    unfold nextAtomicTrans at 2.
+    pose proof (@uniqAtomLabels nextAtomicTrans t) as uniq2.
+    unfold getTrans in uniq2.
+    unfold nextAtomicTrans at 2 in uniq2.
+
+    destruct (respFn t); simpl.
+
+    Case "respFn is Some".
+    destruct r; simpl in *.
+    unfold Index in *.
+    assert (opts: idx < next (lSt (getTransList nextAtomicTrans t)) procR \/
+                  idx > next (lSt (getTransList nextAtomicTrans t)) procR \/
+                  idx = next (lSt (getTransList nextAtomicTrans t)) procR) by omega.
+    destruct opts.
+
+    SCase "idx < next".
+    pose proof (allAtomPrev nextAtomicTrans _ _ H) as [t' [t'_lt_t rest]].
+    specialize (prevEq _ t'_lt_t).
+    unfold atomicResp in prevEq.
+    destruct (getTrans nextAtomicTrans t').
+
+    SSCase "t'_idx is Req".
+    specialize (uniq t').
+    destruct (respFn t').
+
+    SSSCase "respFn(t') is Some".
+    destruct r.
+    injection prevEq as _ idxEq pEq.
+    rewrite pEq in *; rewrite idxEq in *.
+    destruct rest as [u1 u2].
+    assert (u3: idx = next (lSt (getTransList nextAtomicTrans t')) c) by auto.
+    specialize (uniq u1 u3).
+    omega.
+
+    SSSCase "respFn(t') is None".
+    discriminate.
+
+    SSCase "t'_idx is None".
+    intuition.
+
+    destruct H.
+
+    SCase "idx  > next".
+    clear uniq.
+    specialize (allPrev _ H).
+    destruct allPrev as [t' respT'].
+    specialize (lo t').
+    specialize (prevEq t').
+    specialize (uniq2 t').
+    unfold nextAtomicTrans at 2 in uniq2.
+    destruct (respFn t').
+
+    SSCase "respFn t' is Some".
+    destruct r.
+    simpl in *.
+    destruct respT' as [u1 u2].
+    assert (L: procR = procR0) by auto;
+      rewrite <- u2 in H;
+      specialize (lo L H).
+    specialize (prevEq lo).
+    unfold atomicResp at 1 in prevEq.
+    destruct (getTrans nextAtomicTrans t').
+
+    SSSCase "atom t' is Req".
+    injection prevEq as _ idEq pEq.
+    rewrite u2 in idEq.
+    rewrite <- pEq in idEq.
+    specialize (uniq2 L idEq).
+    assert False by omega; intuition.
+
+    SSSCase "atom t' is None".
+    discriminate.
+
+    SSCase "respFn t' is None".
+    intuition.
+
+    SCase "idx = next".
+    rewrite H in *.
+    f_equal.
+    f_equal.
+    clear uniq idx allPrev lo uniq2 H.
+    admit.
+
+    Case "reqFn None".
+    intuition.
+  Qed.
 
   Definition getAtomicResp n := atomicResp (getTrans (@nextAtomicTrans) n).
 
   Theorem respEq n: respFn n = getAtomicResp n.
   Proof.
-    apply (atomicObeys n).
+    apply (obeysP n).
   Qed.
+
+  Print Assumptions respEq.
 End Bisum.
