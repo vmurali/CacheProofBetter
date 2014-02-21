@@ -39,12 +39,4 @@ Section NamedTrans.
   Proof.
     reflexivity.
   Qed.
-
-(*
-  Variable P: nat -> Prop.
-
-  Definition obeysP n :=
-    nextTransProp (getTransNext (nextTransListTrans (getTransList n))).
-*)
-
 End NamedTrans.
