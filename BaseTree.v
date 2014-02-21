@@ -296,3 +296,10 @@ Proof.
   rewrite cEq.
   apply (treeNameHelp nc bc).
 Qed.
+
+Theorem treeName1: match getC nil bHier with
+                     | C x ls => x = nil
+                   end.
+Proof.
+  reflexivity.
+Qed.

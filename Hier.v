@@ -46,6 +46,7 @@ Module mkHierProperties (dt: DataTypes).
     specialize (prop2 0 z_lt_S).
     unfold nth in prop2.
     pose proof (treeName1) as tn1.
+    unfold hier in *.
     destruct hier.
     firstorder.
     specialize (IHl0 hard).

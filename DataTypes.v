@@ -3,10 +3,7 @@ Require Import MsiState Tree BaseTree.
 Export Tree.
 
 Definition hier := getC nil bHier.
-
-Axiom treeName1: match hier with
-                   | C x _ => x = nil
-                 end.
+Opaque hier.
 
 Parameter Addr: Set.
 Parameter zero: Addr.
