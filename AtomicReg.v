@@ -24,6 +24,12 @@ Inductive AtomicTrans s: State -> Set :=
                                             end))
 | Idle: AtomicTrans s s.
 
+Ltac destructAll :=
+  match goal with
+    | [|- context [match ?P with _ => _ end] ] => destruct P
+    | [_:context [match ?P with _ => _ end] |- _] => destruct P
+  end.
+
 Module Bisum (d: DataTypes) (s: StoreAtomicity d).
   Import d s.
 
@@ -391,101 +397,299 @@ Module Bisum (d: DataTypes) (s: StoreAtomicity d).
       | None => Build_NextTrans _ _ _ (Idle s)
     end.
 
+  Section PrevMatch.
+    Variable t: nat.
+    Variable prevEq: forall ti : nat,
+                       ti < t -> respFn ti = atomicResp (getTrans nextAtomicTrans ti).
+    Definition nextTransList := getTransList nextAtomicTrans.
+
+    Ltac assocResp :=
+      unfold getTrans in *;
+      unfold getTransState in *;
+      fold nextTransList in *;
+      unfold nextAtomicTrans in *.
+
+    Lemma bothSomeOrNone:
+      match atomicResp (getTrans nextAtomicTrans t), respFn t with
+        | Some _, Some _ => True
+        | None, None => True
+        | _, _ => False
+      end.
+    Proof.
+      assocResp.
+      destruct (respFn t); simpl; intuition.
+    Qed.
+
+    Lemma procSame:
+      match atomicResp (getTrans nextAtomicTrans t), respFn t with
+        | Some (Build_Resp c1 _ _), Some (Build_Resp c2 _ _) => c1 = c2
+        | _, _ => True
+      end.
+    Proof.
+      assocResp.
+      destruct (respFn t); simpl.
+      destruct r; intuition.
+      intuition.
+    Qed.
+
+    Lemma nextGtFalse:
+      match atomicResp (getTrans nextAtomicTrans t), respFn t with
+        | Some (Build_Resp _ i1 _), Some (Build_Resp _ i2 _) => i1 > i2 -> False
+        | _, _ => True
+      end.
+    Proof.
+      assocResp;
+      case_eq (respFn t);
+      [intros r caseR; destruct r; simpl in *;
+       intros nextGt;
+       pose proof (allAtomPrev nextAtomicTrans _ _ nextGt) as [t' [t'_lt_t allPrev]];
+       specialize (prevEq t'_lt_t);
+       assocResp;
+       case_eq (respFn t'); [
+         intros r caseR'; destruct r; rewrite caseR' in *; simpl in *;
+         pose proof (uniqRespLabels t t') as uniq;
+         rewrite caseR, caseR' in uniq;
+         injection prevEq as _ idEq;
+         rewrite <- idEq in allPrev;
+         assert (tEq: t = t') by (generalize allPrev uniq; clear; intuition);
+         assert False by omega; intuition|
+         intros caseR'; rewrite caseR' in *; intuition] |
+       intros caseR; simpl in *; intuition].
+    Qed.
+
+    Lemma nextLtFalse:
+      match atomicResp (getTrans nextAtomicTrans t), respFn t with
+        | Some (Build_Resp _ i1 _), Some (Build_Resp _ i2 _) => i1 < i2 -> False
+        | _, _ => True
+      end.
+    Proof.
+      assocResp;
+      case_eq (respFn t);
+      [intros r caseR; destruct r; simpl in *;
+       intros nextLt;
+       pose proof (allPrevious t) as allPrev;
+       rewrite caseR in *;
+       specialize (allPrev _ nextLt);
+       destruct allPrev as [t' [t'_lt_t allPrev]];
+       specialize (prevEq t'_lt_t);
+       assocResp;
+       case_eq (respFn t');
+       [intros r caseR'; destruct r; rewrite caseR' in *; simpl in *;
+        pose proof (uniqAtomLabels nextAtomicTrans t t') as uniq;
+        assocResp;
+        rewrite caseR, caseR' in uniq; simpl in *;
+        injection prevEq as _ idEq;
+        assert (tEq: t = t') by (generalize allPrev idEq uniq; clear; intuition);
+        assert False by omega; intuition |
+        intros caseR'; rewrite caseR' in *; intuition] | 
+        intros caseR; simpl in *; intuition].
+    Qed.
+
+    Lemma nextEq:
+      match atomicResp (getTrans nextAtomicTrans t), respFn t with
+        | Some (Build_Resp _ i1 _), Some (Build_Resp _ i2 _) => i1 = i2
+        | _, _ => True
+      end.
+    Proof.
+      pose proof nextLtFalse;
+      pose proof nextGtFalse;
+      unfold Index in *;
+      repeat destructAll; try (omega); intuition.
+    Qed.
+
+    Lemma loadMatch:
+      match atomicResp (getTrans nextAtomicTrans t), respFn t with
+        | Some (Build_Resp _ _ d1), Some (Build_Resp _ _ d2) =>
+          d1 = d2
+        | _, _ => True
+      end.
+    Proof.
+      assocResp.
+      case_eq (respFn t).
+      intros r respEq; destruct r; simpl in *.
+      case_eq (desc (reqFn procR (next (lSt (nextTransList t)) procR))).
+      intros isLd.
+      pose proof nextEq as nextEq.
+      pose proof (storeAtomicity t) as atom1.
+      pose proof (storeAtomicityAtom nextAtomicTrans t) as atom2.
+      assocResp.
+      rewrite respEq in *.
+      simpl in *.
+      rewrite nextEq in *.
+      destruct (reqFn procR idx).
+      simpl in *.
+      fold nextAtomicTrans in atom2.
+      rewrite isLd in *.
+      unfold latestAtomValue in atom2.
+
+      destruct atom1 as [no1|yes1]; destruct atom2 as [no2|yes2].
+
+      Case "noBefore1, noBefore 2".
+      destruct no1 as [u1 _]; destruct no2 as [u2 _].
+      rewrite <- u1 in u2; assumption.
+
+      Case "noBefore1, before 2".
+      destruct yes2 as [tm [tm_lt_t stMatch]].
+      unfold lastMatchAtomStore in stMatch.
+      specialize (prevEq tm_lt_t).
+      assocResp.
+      fold nextAtomicTrans in *.
+      destruct no1 as [_ no1].
+      specialize (no1 tm tm_lt_t).
+      
+      case_eq (respFn tm).
+      intros r respmEq; destruct r; rewrite respmEq in *; simpl in *.
+      unfold matchAtomStore in stMatch.
+      assocResp; fold nextAtomicTrans in *.
+      injection prevEq as _ idEq.
+      rewrite <- idEq in *.
+      destruct (reqFn procR0 idx0).
+      destruct stMatch as [[_ [u1 u2]] _].
+      intuition.
+
+      intros respmEq; rewrite respmEq in *; simpl in *; intuition.
+
+      Case "before1, noBefore 2".
+      destruct yes1 as [tm [tm_lt_t' stMatch]].
+      specialize (prevEq tm_lt_t').
+      assert (tm_lt_t: 0 <= tm < t) by omega.
+      destruct no2 as [_ no2].
+      unfold noAtomStore in no2.
+      unfold noCurrAtomStore in no2.
+      assocResp; fold nextAtomicTrans in *.
+      specialize (no2 tm tm_lt_t).
+
+      case_eq (respFn tm).
+      intros r respmEq; destruct r; rewrite respmEq in *; simpl in *.
+      injection prevEq as _ idEq.
+      rewrite <- idEq in *.
+      destruct (reqFn procR0 idx0).
+      destruct stMatch as [_ [u1 [u2 _]]].
+      intuition.
+
+      intros respmEq; rewrite respmEq in *; simpl in *; intuition.
+      
+      Case "before1, before 2".
+      destruct yes1 as [tm1 [tm1_lt_t stMatch1]].
+      destruct yes2 as [tm2 [tm2_lt_t stMatch2]].
+      unfold lastMatchAtomStore in stMatch2.
+      assocResp.
+      fold nextAtomicTrans in *.
+      pose proof (prevEq tm1_lt_t) as prev1.
+      pose proof (prevEq tm2_lt_t) as prev2.
+      clear prevEq.
+      unfold matchAtomStore, noAtomStore, noCurrAtomStore in *;
+        assocResp;
+        fold nextAtomicTrans in *.
+
+      case_eq (respFn tm1); case_eq (respFn tm2).
+
+      SCase "some tm1, some tm2".
+      intros r r2Eq; destruct r; rewrite r2Eq in *;
+      intros r r1Eq; destruct r; rewrite r1Eq in *; simpl in *.
+
+      injection prev1 as d1Eq i1Eq.
+      rewrite <- i1Eq in *;
+      rewrite d1Eq in *; clear prev1 d1Eq.
+      injection prev2 as d2Eq i2Eq.
+      rewrite <- i2Eq in *;
+      rewrite d2Eq in *; clear prev2 d2Eq.
+
+      simpl in *.
+
+      assert (opts: tm1 = tm2 \/ tm1 < tm2 \/ tm1 > tm2) by omega.
+      destruct opts.
+
+      SSCase "tm1 = tm2".
+      rewrite H in *.
+      rewrite r1Eq in r2Eq.
+      injection r2Eq as dEq iEq pEq.
+      rewrite dEq in *;
+        rewrite iEq in *;
+        rewrite pEq in *.
+      destruct (reqFn procR0 idx0).
+      destruct stMatch1 as [u1 _];
+        destruct stMatch2 as [[u2 _] _].
+      rewrite <- u1 in u2;
+        assumption.
+
+      destruct H.
+
+      SSCase "tm1 < tm2".      
+      destruct (reqFn procR1 idx1).
+      destruct stMatch1 as [_ [_ [_ noLater]]].
+      assert (c1: tm1 < tm2 < t) by omega.
+      specialize (noLater _ c1); clear c1.
+      rewrite r2Eq in noLater.
+      destruct (reqFn procR0 idx0).
+      generalize stMatch2 noLater; clear; intuition.
+
+      SSCase "tm2 < tm1".
+      destruct (reqFn procR0 idx0).
+      destruct stMatch2 as [_ noLater].
+      assert (c1: S tm2 <= tm1 < t) by omega.
+      specialize (noLater _ c1); clear c1.
+      rewrite r1Eq in noLater.
+      simpl in *.
+      rewrite <- i1Eq in *.
+      destruct (reqFn procR1 idx1).
+      generalize stMatch1 noLater; clear; intuition.
+
+      SCase "some tm1, none tm2".
+      intros r2Eq r r1Eq; destruct r; rewrite r2Eq in *; rewrite r1Eq in *;
+      simpl in *; intuition.
+
+      SCase "none tm1, some tm2".
+      intros r r2Eq r1Eq; destruct r; rewrite r2Eq, r1Eq in *.
+      simpl in *; intuition.
+
+      SCase "none tm1, none tm2".
+      intros r2Eq r1Eq; rewrite r2Eq, r1Eq in *.
+      simpl in *; intuition.
+
+      intros r.
+      simpl in *.
+      pose proof nextEq as nextEq.
+      assocResp.
+      pose proof (storeAtomicity t) as sa.
+      rewrite respEq in *.
+      simpl in *.
+      rewrite nextEq in r.
+      destruct (reqFn procR idx).
+      simpl in *.
+      rewrite r in *.
+      auto.
+
+      intros.
+      repeat destructAll; intuition.
+    Qed.
+
+    Lemma allMatch:
+      match atomicResp (getTrans nextAtomicTrans t), respFn t with
+        | Some (Build_Resp c1 i1 d1), Some (Build_Resp c2 i2 d2) =>
+          i1 = i2 /\ c1 = c2 /\ d1 = d2
+        | None, Some _ => False
+        | Some _, None => False
+        | None, None => True
+      end.
+    Proof.
+      pose proof bothSomeOrNone.
+      pose proof procSame.
+      pose proof nextEq.
+      pose proof loadMatch.
+
+      repeat destructAll; intuition.
+    Qed.
+  End PrevMatch.
+
   Theorem obeysP: forall n,
                     respFn n = atomicResp (getTrans nextAtomicTrans n).
   Proof.
     apply strong_ind.
     intros t prevEq.
-    unfold atomicResp.
-    pose proof (@uniqRespLabels t) as uniq.
-    pose proof (@allPrevious t) as allPrev.
-    pose proof (@localOrdering t) as lo.
-    unfold getTrans.
-    unfold nextAtomicTrans at 2.
-    pose proof (@uniqAtomLabels nextAtomicTrans t) as uniq2.
-    unfold getTrans in uniq2.
-    unfold nextAtomicTrans at 2 in uniq2.
-
-    destruct (respFn t); simpl.
-
-    Case "respFn is Some".
-    destruct r; simpl in *.
-    unfold Index in *.
-    assert (opts: idx < next (lSt (getTransList nextAtomicTrans t)) procR \/
-                  idx > next (lSt (getTransList nextAtomicTrans t)) procR \/
-                  idx = next (lSt (getTransList nextAtomicTrans t)) procR) by omega.
-    destruct opts.
-
-    SCase "idx < next".
-    pose proof (allAtomPrev nextAtomicTrans _ _ H) as [t' [t'_lt_t rest]].
-    specialize (prevEq _ t'_lt_t).
-    unfold atomicResp in prevEq.
-    destruct (getTrans nextAtomicTrans t').
-
-    SSCase "t'_idx is Req".
-    specialize (uniq t').
-    destruct (respFn t').
-
-    SSSCase "respFn(t') is Some".
-    destruct r.
-    injection prevEq as _ idxEq pEq.
-    rewrite pEq in *; rewrite idxEq in *.
-    destruct rest as [u1 u2].
-    assert (u3: idx = next (lSt (getTransList nextAtomicTrans t')) c) by auto.
-    specialize (uniq u1 u3).
-    omega.
-
-    SSSCase "respFn(t') is None".
-    discriminate.
-
-    SSCase "t'_idx is None".
-    intuition.
-
-    destruct H.
-
-    SCase "idx  > next".
-    clear uniq.
-    specialize (allPrev _ H).
-    destruct allPrev as [t' respT'].
-    specialize (lo t').
-    specialize (prevEq t').
-    specialize (uniq2 t').
-    unfold nextAtomicTrans at 2 in uniq2.
-    destruct (respFn t').
-
-    SSCase "respFn t' is Some".
-    destruct r.
-    simpl in *.
-    destruct respT' as [u1 u2].
-    assert (L: procR = procR0) by auto;
-      rewrite <- u2 in H;
-      specialize (lo L H).
-    specialize (prevEq lo).
-    unfold atomicResp at 1 in prevEq.
-    destruct (getTrans nextAtomicTrans t').
-
-    SSSCase "atom t' is Req".
-    injection prevEq as _ idEq pEq.
-    rewrite u2 in idEq.
-    rewrite <- pEq in idEq.
-    specialize (uniq2 L idEq).
-    assert False by omega; intuition.
-
-    SSSCase "atom t' is None".
-    discriminate.
-
-    SSCase "respFn t' is None".
-    intuition.
-
-    SCase "idx = next".
-    rewrite H in *.
-    f_equal.
-    f_equal.
-    clear uniq idx allPrev lo uniq2 H.
-    admit.
-
-    Case "reqFn None".
-    intuition.
+    pose proof (allMatch prevEq) as sth.
+    repeat destructAll;
+    repeat f_equal; intuition.
   Qed.
 
   Definition getAtomicResp n := atomicResp (getTrans (@nextAtomicTrans) n).

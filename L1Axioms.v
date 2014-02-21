@@ -290,7 +290,7 @@ Module mkL1Axioms : L1Axioms mkDataTypes.
   Qed.
 
   Theorem deqImpDeqBefore: forall {c i1 i2 t},
-                             deqR c i1 t -> i2 < i1 -> exists t', deqR c i2 t'.
+                             deqR c i1 t -> i2 < i1 -> exists t', t' < t /\ deqR c i2 t'.
   Proof.
     intros c i1 i2 t deq i2_lt_i1.
     unfold deqR in deq.
@@ -298,11 +298,11 @@ Module mkL1Axioms : L1Axioms mkDataTypes.
     destruct deq as [eq sth].
     rewrite eq in *.
     rewrite <- sth in *.
-    pose proof (incReqImpDeq i2_lt_i1) as [x [_ y]]; exists x; intuition.
+    pose proof (incReqImpDeq i2_lt_i1) as [x [z y]]; exists x; intuition.
     destruct deq as [eq sth].
     rewrite eq in *.
     rewrite <- sth in *.
-    pose proof (incReqImpDeq i2_lt_i1) as [x [_ y]]; exists x; intuition.
+    pose proof (incReqImpDeq i2_lt_i1) as [x [z y]]; exists x; intuition.
     intuition.
     intuition.
     intuition.

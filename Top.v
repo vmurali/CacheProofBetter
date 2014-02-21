@@ -1,6 +1,7 @@
 Require Import DataTypes L1 StoreAtomicity LatestValue Cache Channel Compatible
 Rules ChannelAxiom L1Axioms CompatBehavior LatestValueAxioms BehaviorAxioms MsiState.
 
+Set Implicit Arguments.
 Module mkTop.
   Module l1 := mkL1Axioms.
   Module ch' := mkChannel.
@@ -75,7 +76,8 @@ Module mkTop.
     Theorem allPrevious:
       forall {t2}, match respFn t2 with
                      | Some (Build_Resp c2 i2 _) =>
-                       forall {i1}, i1 < i2 -> exists t1, match respFn t1 with
+                       forall {i1}, i1 < i2 -> exists t1, t1 < t2 /\
+                                                          match respFn t1 with
                                                             | Some (Build_Resp c1 i _) =>
                                                               c1 = c2 /\ i = i1
                                                             | None => False
@@ -87,11 +89,15 @@ Module mkTop.
       destruct (deqOrNot t2).
       finish.
       intros i1 cond.
-      pose proof (deqImpDeqBefore d cond) as [t' deq2].
+      pose proof (deqImpDeqBefore d cond) as [t' [cond2 deq2]].
       exists t'.
       destruct (deqOrNot t').
       finish.
+      constructor.
+      intuition.
       apply (uniqDeqProc3 d0 deq2).
+      constructor.
+      intuition.
       apply (n _ _ deq2).
       intuition.
     Qed.

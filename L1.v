@@ -22,7 +22,7 @@ Module Type L1Axioms (dt: DataTypes).
                                             | St => state c (loc q) t = Mo
                                           end.
   Parameter deqImpDeqBefore: forall {c i1 i2 t},
-                               deqR c i1 t -> i2 < i1 -> exists t', deqR c i2 t'.
+                               deqR c i1 t -> i2 < i1 -> exists t', t' < t /\ deqR c i2 t'.
 End L1Axioms.
 
 Module Type L1Theorems (dt: DataTypes) (l1A: L1Axioms dt).
