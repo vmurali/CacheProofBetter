@@ -17,14 +17,14 @@ Record GlobalState :=
     wtS: Cache -> Addr -> State;
     dirWt: Cache -> Cache -> Addr -> bool;
     dirWtS: Cache -> Cache -> Addr -> State;
-    req: Cache -> nat
+    req: Addr -> Cache -> nat
   }.
 
 Definition dmy := Build_BaseMesg In In zero (initData zero) mch.
 
 Inductive Transition (s: GlobalState) : GlobalState -> Set :=
-| LoadReq: forall {c}, defined c -> leaf c -> desc (reqFn c (req s c)) = Ld ->
-                       sle Sh (st s c (loc (reqFn c (req s c)))) -> 
+| LoadReq: forall {c a}, defined c -> leaf c -> desc (reqFn a c (req s a c)) = Ld ->
+                       sle Sh (st s c a) -> 
                        Transition s {|
                                     dt := dt s;
                                     ch := ch s;
@@ -34,17 +34,22 @@ Inductive Transition (s: GlobalState) : GlobalState -> Set :=
                                     wtS := wtS s;
                                     dirWt := dirWt s;
                                     dirWtS := dirWtS s;
-                                    req := fun t => match decTree t c with
-                                                      | left _ => S (req s t)
-                                                      | _ => req s t
-                                                    end
+                                    req := fun w t => 
+                                             match decAddr w a with
+                                               | left _ =>
+                                                   match decTree t c with
+                                                     | left _ => S (req s w t)
+                                                     | _ => req s w t
+                                                   end
+                                               | right _ => req s w t
+                                             end
                                   |}
-| StoreReq: forall {c}, defined c -> leaf c -> desc (reqFn c (req s c)) = St ->
-                        (st s c (loc (reqFn c (req s c))) = Mo) ->
+| StoreReq: forall {c a}, defined c -> leaf c -> desc (reqFn a c (req s a c)) = St ->
+                        (st s c a = Mo) ->
                         Transition s {|
                                      dt := fun t w => match decTree t c with
-                                                      | left _ => match decAddr w (loc (reqFn t (req s t))) with
-                                                                    | left _ => dataQ (reqFn t (req s t))
+                                                      | left _ => match decAddr w a with
+                                                                    | left _ => dataQ (reqFn a t (req s w t))
                                                                     | right _ => dt s t w
                                                                   end
                                                       | right _ => dt s t w
@@ -56,10 +61,15 @@ Inductive Transition (s: GlobalState) : GlobalState -> Set :=
                                      wtS := wtS s;
                                      dirWt := dirWt s;
                                      dirWtS := dirWtS s;
-                                     req := fun t => match decTree t c with
-                                                       | left _ => S (req s t)
-                                                       | _ => req s t
-                                                     end
+                                     req := fun w t => 
+                                             match decAddr w a with
+                                               | left _ =>
+                                                   match decTree t c with
+                                                     | left _ => S (req s w t)
+                                                     | _ => req s w t
+                                                   end
+                                               | right _ => req s w t
+                                             end
                                    |}
 | ChildSendReq: forall {p c}, defined p -> defined c -> parent c p ->
                               forall {x a}, slt (st s c a) x -> wt s c a = false ->
@@ -358,7 +368,7 @@ Definition initGlobalState :=
      wtS := fun t w => In;
      dirWt := fun t w z => false;
      dirWtS := fun t w z => In;
-     req := fun t => 0
+     req := fun t w => 0
   |}.
 
 Record Behavior := {
@@ -592,11 +602,11 @@ Module mkDataTypes <: DataTypes.
   Definition proc := recv.
   Definition deq := recv.
 
-  Definition deqR c i t := match (trans oneBeh) t with
-                                   | LoadReq ca _ _ _ _ =>
-                                     ca = c /\ req (sys oneBeh t) c = i
-                                   | StoreReq ca _ _ _ _ =>
-                                     ca = c /\ req (sys oneBeh t) c = i
+  Definition deqR a c i t := match (trans oneBeh) t with
+                                   | LoadReq ca aa _ _ _ _ =>
+                                     aa = a /\ ca = c /\ req (sys oneBeh t) a c = i
+                                   | StoreReq ca aa _ _ _ _ =>
+                                     aa = a /\ ca = c /\ req (sys oneBeh t) a c = i
                                    | _ => False
                                  end.
 End mkDataTypes.

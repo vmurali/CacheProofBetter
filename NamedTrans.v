@@ -1,10 +1,9 @@
-Require Import Arith.
 Set Implicit Arguments.
 
 Section NamedTrans.
   Variable State: Set.
-  Variable (Trans: State -> State -> Set).
-  Variable (init: State).
+  Variable Trans: State -> State -> Set.
+  Variable init: State.
 
   Inductive TransList: nat -> State -> Set :=
     | Init: TransList 0 init
@@ -31,12 +30,7 @@ Section NamedTrans.
         Build_NextList (Next ls (trans t))
     end.
 
-  Definition getTransState n := lSt (getTransList n).
+  Definition getTransSt n := lSt (getTransList n).
 
   Definition getTrans n := trans (getTransNext (lTrans (getTransList n))).
-
-  Theorem getInit: getTransState 0 = init.
-  Proof.
-    reflexivity.
-  Qed.
 End NamedTrans.

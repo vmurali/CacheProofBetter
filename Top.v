@@ -10,18 +10,17 @@ Module mkTop.
   Module lv := mkLatestValueAxioms ch.
   Module ba := mkBehaviorAxioms.
   Module l1T := LatestValueTheorems mkDataTypes ch ba l1 comp lv.
-  Module mkStoreAtomicity: StoreAtomicity mkDataTypes.
     Import mkDataTypes l1 l1T.
 
 
-    Definition respFn t :=
-      match deqOrNot t with
+    Definition respFn a t :=
+      match deqOrNot a t with
         | inleft pf =>
           match pf with
             | exist (c,i) _ =>
               Some (Build_Resp c i
-                               match desc (reqFn c i) with
-                                 | Ld => data c (loc (reqFn c i)) t
+                               match desc (reqFn a c i) with
+                                 | Ld => data c a t
                                  | St => initData zero
                                end)
           end
@@ -34,14 +33,14 @@ Module mkTop.
                           end; simpl in *.
 
     Theorem uniqRespLabels:
-      forall {t1 t2}, match respFn t1, respFn t2 with
+      forall {a t1 t2}, match respFn a t1, respFn a t2 with
                         | Some (Build_Resp c1 i1 _), Some (Build_Resp c2 i2 _) =>
                           c1 = c2 -> i1 = i2 -> t1 = t2
                         | _, _ => True
                       end.
     Proof.
-      intros t1 t2; unfold respFn;
-      destruct (deqOrNot t1); destruct (deqOrNot t2);
+      intros a t1 t2; unfold respFn;
+      destruct (deqOrNot a t1); destruct (deqOrNot a t2);
       solve [finish; intros H H0; rewrite <- H in *; rewrite <- H0 in *;
              apply (uniqDeqProc2 d0 d) |
              finish; intuition | 
@@ -49,14 +48,14 @@ Module mkTop.
     Qed.
 
     Theorem localOrdering:
-      forall {t1 t2}, match respFn t1, respFn t2 with
+      forall {a t1 t2}, match respFn a t1, respFn a t2 with
                         | Some (Build_Resp c1 i1 _), Some (Build_Resp c2 i2 _) =>
                           c1 = c2 -> i1 > i2 -> t1 > t2
                         | _, _ => True
                       end.
     Proof.
-      intros t1 t2; unfold respFn;
-      destruct (deqOrNot t1); destruct (deqOrNot t2).
+      intros a t1 t2; unfold respFn;
+      destruct (deqOrNot a t1); destruct (deqOrNot a t2).
       finish.
       intros H H0.
       rewrite H in *.
@@ -74,10 +73,10 @@ Module mkTop.
     Qed.
 
     Theorem allPrevious:
-      forall {t2}, match respFn t2 with
+      forall {a t2}, match respFn a t2 with
                      | Some (Build_Resp c2 i2 _) =>
                        forall {i1}, i1 < i2 -> exists t1, t1 < t2 /\
-                                                          match respFn t1 with
+                                                          match respFn a t1 with
                                                             | Some (Build_Resp c1 i _) =>
                                                               c1 = c2 /\ i = i1
                                                             | None => False
@@ -85,13 +84,13 @@ Module mkTop.
                      | _ => True
                    end.
     Proof.
-      intro t2; unfold respFn.
-      destruct (deqOrNot t2).
+      intros a t2; unfold respFn.
+      destruct (deqOrNot a t2).
       finish.
       intros i1 cond.
       pose proof (deqImpDeqBefore d cond) as [t' [cond2 deq2]].
       exists t'.
-      destruct (deqOrNot t').
+      destruct (deqOrNot a t').
       finish.
       constructor.
       intuition.
@@ -103,31 +102,31 @@ Module mkTop.
     Qed.
 
     Theorem storeAtomicity:
-      forall {t},
-        match respFn t with
+      forall {a t},
+        match respFn a t with
           | Some (Build_Resp c i d) =>
-            let (a, descQ, dtQ) := reqFn c i in
+            let (descQ, dtQ) := reqFn a c i in
             match descQ with
               | Ld =>
                 (d = initData a /\
                  forall t', t' < t ->
-                            match respFn t' with
+                            match respFn a t' with
                               | Some (Build_Resp c' i' d') =>
-                                let (a', descQ', dtQ') := reqFn c' i' in
-                                a' = a -> descQ' = St -> False
+                                let (descQ', dtQ') := reqFn a c' i' in
+                                descQ' = St -> False
                               | _ => True
                             end) \/
                 (exists tm,
                    tm < t /\
-                   match respFn tm with
+                   match respFn a tm with
                      | Some (Build_Resp cm im dm) =>
-                       let (am, descQm, dtQm) := reqFn cm im in
-                       d = dtQm /\ am = a /\ descQm = St /\
+                       let (descQm, dtQm) := reqFn a cm im in
+                       d = dtQm /\ descQm = St /\
                        forall t', tm < t' < t ->
-                                  match respFn t' with
+                                  match respFn a t' with
                                     | Some (Build_Resp c' i' d') =>
-                                      let (a', descQ', dtQ') := reqFn c' i' in
-                                      a' = a -> descQ' = St -> False
+                                      let (descQ', dtQ') := reqFn a c' i' in
+                                      descQ' = St -> False
                                     | _ => True
                                   end
                      | _ => False
@@ -137,50 +136,49 @@ Module mkTop.
           | _ => True
         end.
     Proof.
-      intros t.
+      intros a t.
       unfold respFn.
-      destruct (deqOrNot t).
+      destruct (deqOrNot a t).
       finish.
       pose proof (processDeq d) as procD.
-      destruct (reqFn c i); simpl.
+      destruct (reqFn a c i); simpl.
       simpl in *.
       destruct desc.
       pose proof (deqLeaf d) as lf.
       pose proof (deqDef d) as def.
-      assert (le: sle Sh (state c loc t)) by
-          (unfold sle; destruct (state c loc t); auto).
+      assert (le: sle Sh (state c a t)) by
+          (unfold sle; destruct (state c a t); auto).
       pose proof (latestValue def lf le) as lv.
       destruct lv as [[dtMatch noPrev]|prev].
       left.
       constructor; intuition.
-      destruct (deqOrNot t').
+      destruct (deqOrNot a t').
       finish.
       pose proof (deqDef d0) as def0.
       assert (cond: 0 <= t' < t) by omega.
       specialize (noPrev _ cond _ i0 def0).
-      destruct (reqFn c0 i0).
+      destruct (reqFn a c0 i0).
       intros; simpl in *.
       intuition.
       intuition.
       right.
-      destruct prev as [cb [ib [tb [defcb [tb_lt_t [deq_tb [isSt [locM [dtM rest]]]]]]]]].
+      destruct prev as [cb [ib [tb [defcb [tb_lt_t [deq_tb [isSt [dtM rest]]]]]]]].
       exists tb.
       constructor.
       intuition.
-      destruct (deqOrNot tb).
+      destruct (deqOrNot a tb).
       finish.
       pose proof (uniqDeqProc3 deq_tb d0) as [ceq ieq].
       rewrite <- ceq in *; rewrite <- ieq in *.
-      destruct (reqFn cb ib); simpl in *.
-      constructor. intuition.
+      destruct (reqFn a cb ib); simpl in *.
       constructor. intuition.
       constructor. intuition.
       intros t' cond.
-      destruct (deqOrNot t').
+      destruct (deqOrNot a t').
       finish.
       pose proof (deqDef d1) as defdeq.
       specialize (rest _ cond _ i1 defdeq).
-      destruct (reqFn c1 i1); simpl in *.
+      destruct (reqFn a c1 i1); simpl in *.
       generalize rest d1; clear; intuition.
 
       intuition.
@@ -194,5 +192,4 @@ Module mkTop.
     Print Assumptions localOrdering.
     Print Assumptions allPrevious.
     Print Assumptions storeAtomicity.
-  End mkStoreAtomicity.
 End mkTop.
