@@ -32,7 +32,7 @@ Module mkTop.
                             | [x: (_ * _)%type |- _] => destruct x
                           end; simpl in *.
 
-    Theorem uniqRespLabels:
+    Theorem uniqRespLabels':
       forall {a t1 t2}, match respFn a t1, respFn a t2 with
                         | Some (Build_Resp c1 i1 _), Some (Build_Resp c2 i2 _) =>
                           c1 = c2 -> i1 = i2 -> t1 = t2
@@ -47,7 +47,7 @@ Module mkTop.
              intuition].
     Qed.
 
-    Theorem localOrdering:
+    Theorem localOrdering':
       forall {a t1 t2}, match respFn a t1, respFn a t2 with
                         | Some (Build_Resp c1 i1 _), Some (Build_Resp c2 i2 _) =>
                           c1 = c2 -> i1 > i2 -> t1 > t2
@@ -72,7 +72,7 @@ Module mkTop.
       intuition.
     Qed.
 
-    Theorem allPrevious:
+    Theorem allPrevious':
       forall {a t2}, match respFn a t2 with
                      | Some (Build_Resp c2 i2 _) =>
                        forall {i1}, i1 < i2 -> exists t1, t1 < t2 /\
@@ -101,43 +101,31 @@ Module mkTop.
       intuition.
     Qed.
 
-    Theorem storeAtomicity:
-      forall {a t},
-        match respFn a t with
-          | Some (Build_Resp c i d) =>
-            let (descQ, dtQ) := reqFn a c i in
-            match descQ with
-              | Ld =>
-                (d = initData a /\
-                 forall t', t' < t ->
-                            match respFn a t' with
-                              | Some (Build_Resp c' i' d') =>
-                                let (descQ', dtQ') := reqFn a c' i' in
-                                descQ' = St -> False
-                              | _ => True
-                            end) \/
-                (exists tm,
-                   tm < t /\
-                   match respFn a tm with
-                     | Some (Build_Resp cm im dm) =>
-                       let (descQm, dtQm) := reqFn a cm im in
-                       d = dtQm /\ descQm = St /\
-                       forall t', tm < t' < t ->
-                                  match respFn a t' with
-                                    | Some (Build_Resp c' i' d') =>
-                                      let (descQ', dtQ') := reqFn a c' i' in
-                                      descQ' = St -> False
-                                    | _ => True
-                                  end
-                     | _ => False
-                   end)
-              | St => d = initData zero 
-            end
-          | _ => True
-        end.
+    Theorem storeAtomicity':
+        forall a t,
+          match respFn a t with
+            | Some (Build_Resp c i d) =>
+              let (descQ, dtQ) := reqFn a c i in
+              match descQ with
+                | Ld =>
+                  (d = initData a /\ forall t', t' < t -> noStore reqFn respFn a t') \/
+                  (exists tm,
+                     tm < t /\
+                     match respFn a tm with
+                       | Some (Build_Resp cm im dm) =>
+                         let (descQm, dtQm) := reqFn a cm im in
+                         d = dtQm /\ descQm = St /\
+                         forall t', tm < t' < t -> noStore reqFn respFn a t'
+                       | _ => False
+                     end)
+                | St => d = initData zero 
+              end
+            | _ => True
+          end.
     Proof.
       intros a t.
       unfold respFn.
+      unfold noStore.
       destruct (deqOrNot a t).
       finish.
       pose proof (processDeq d) as procD.
@@ -188,8 +176,12 @@ Module mkTop.
       intuition.
     Qed.
 
-    Print Assumptions uniqRespLabels.
-    Print Assumptions localOrdering.
-    Print Assumptions allPrevious.
-    Print Assumptions storeAtomicity.
+    About StoreAtomicity.
+
+
+    Theorem sa a: StoreAtomicity reqFn respFn a.
+    Proof.
+      apply (Build_StoreAtomicity reqFn respFn a
+            (@uniqRespLabels' a) (@localOrdering' a) (@allPrevious' a) (storeAtomicity' a)).
+    Qed.
 End mkTop.
