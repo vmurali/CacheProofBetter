@@ -2,6 +2,11 @@ Require Import DataTypes.
 
 Set Implicit Arguments.
 
+Record Resp := { procR: Cache;
+                 idx: Index;
+                 datum: Data
+               }.
+
 Section StoreAtomicity.
   Variable reqFn: Addr -> Cache -> Index -> Req.
 

@@ -51,11 +51,6 @@ Record Req := { desc: Desc;
                 dataQ: Data
               }.
 
-Record Resp := { procR: Cache;
-                 idx: Index;
-                 datum: Data
-               }.
-
 Parameter reqFn: Addr -> Cache -> Index -> Req.
 Parameter initData: Addr -> Data.
 
