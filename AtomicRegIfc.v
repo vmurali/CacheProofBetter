@@ -4,22 +4,29 @@ Require Import DataTypes StoreAtomicity.
 
 Section ForAddr.
   Variable reqFn: Addr -> Cache -> Index -> Req.
-  Variable a: Addr.
 
-  Record State := { mem: Data;
-                    next: Cache -> Index
+  Record State := { mem: Addr -> Data;
+                    next: Addr -> Cache -> Index
                   }.
   
   Inductive AtomicTrans s: State -> Set :=
-  | AReq: forall c, AtomicTrans s (Build_State
-                                    (match desc (reqFn a c (next s c)) with
+  | AReq: forall a c, AtomicTrans s (Build_State
+                                    (match desc (reqFn a c (next s a c)) with
                                        | Ld => mem s
-                                       | St => dataQ (reqFn a c (next s c))
+                                       | St => fun a' =>
+                                         if decAddr a a'
+                                         then dataQ (reqFn a' c (next s a c))
+                                         else mem s a'
                                      end)
-                                    (fun t => match decTree t c with
-                                                | left _ => S (next s t)
-                                                | _ => next s t
-                                              end))
+                                    (fun a' t => 
+                                       if decAddr a a'
+                                       then
+                                         match decTree t c with
+                                                   | left _ => S (next s a' t)
+                                                   | _ => next s a' t
+                                         end
+                                       else next s a' t
+                                    ))
   | Idle: AtomicTrans s s.
   
   CoInductive AtomicTransList: State -> Set :=

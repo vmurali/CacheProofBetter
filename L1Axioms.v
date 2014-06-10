@@ -3,12 +3,21 @@ Require Import Coq.Logic.Classical Rules DataTypes MsiState L1 Omega Coq.Relatio
 Module mkL1Axioms : L1Axioms mkDataTypes.
   Import mkDataTypes.
 
-  Theorem deqOrNot: forall a t, {x| deqR a (fst x) (snd x) t} + {forall c i, ~ deqR a c i t}.
+  Theorem deqOrNot: forall t, {x| deqR (fst (fst x)) (snd (fst x)) (snd x) t} + {forall a c i, ~ deqR a c i t}.
   Proof.
-    intros a t.
+    intros t.
     unfold deqR.
-    destruct (trans oneBeh t);
-    solve [destruct (decAddr a a0); [left; apply (exist _ (c, (req (sys oneBeh t) a c)))| right]; intuition | intuition].
+    destruct (trans oneBeh t).
+    (left; apply (exist _ (a, c, (req (sys oneBeh t) a c)))); intuition.
+    (left; apply (exist _ (a, c, (req (sys oneBeh t) a c)))); intuition.
+    right; intuition.
+    right; intuition.
+    right; intuition.
+    right; intuition.
+    right; intuition.
+    right; intuition.
+    right; intuition.
+    right; intuition.
   Qed.
 
   Theorem deqLeaf: forall {c a i t}, deqR a c i t -> leaf c.
@@ -194,21 +203,29 @@ Module mkL1Axioms : L1Axioms mkDataTypes.
     intuition.
   Qed.
 
-  Theorem uniqDeqProc3: forall {c1 a i1 t c2 i2},
-                          deqR a c1 i1 t -> deqR a c2 i2 t ->
-                          c1 = c2 /\ i1 = i2.
+  Theorem uniqDeqProc3: forall {c1 a1 i1 t c2 a2 i2},
+                          deqR a1 c1 i1 t -> deqR a2 c2 i2 t ->
+                          a1 = a2 /\ c1 = c2 /\ i1 = i2.
   Proof.
-    intros c1 a i1 t c2 i2 deq1 deq2.
+    intros c1 a1 i1 t c2 a2 i2 deq1 deq2.
     unfold deqR in *.
-    destruct (trans oneBeh t);
-      solve [
-          repeat match goal with
-                   | [d: _ /\ _ /\ _ |- _] => destruct d
-                   | [d: _ /\ _ |- _ ] => destruct d
-                 end;
-          rewrite H2 in *; rewrite H0 in *;
-          rewrite <- H4; rewrite <- H3;
-          intuition| intuition].
+    destruct (trans oneBeh t).
+    destruct deq2 as [x [y z]].
+    destruct deq1 as [x1 [y1 z1]].
+    rewrite <- x, <- y, <- x1, <- y1 in *.
+    intuition.
+    destruct deq2 as [x [y z]].
+    destruct deq1 as [x1 [y1 z1]].
+    rewrite <- x, <- y, <- x1, <- y1 in *.
+    intuition.
+    intuition.
+    intuition.
+    intuition.
+    intuition.
+    intuition.
+    intuition.
+    intuition.
+    intuition.
   Qed.
 
   Theorem incReqImpDeq: forall {c a t i},
