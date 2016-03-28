@@ -47,17 +47,11 @@ Record Mesg := {
               msgId: MLabel
             }.
 
-Record Req := { loc: Addr;
-                desc: Desc;
+Record Req := { desc: Desc;
                 dataQ: Data
               }.
 
-Record Resp := { procR: Cache;
-                 idx: Index;
-                 datum: Data
-               }.
-
-Parameter reqFn: Cache -> Index -> Req.
+Parameter reqFn: Addr -> Cache -> Index -> Req.
 Parameter initData: Addr -> Data.
 
 Module Type DataTypes.
@@ -71,7 +65,7 @@ Module Type DataTypes.
   Parameter dwait: Cache -> Cache -> Addr -> Time -> bool.
   Parameter dwaitS: Cache -> Cache -> Addr -> Time -> State.
 
-  Parameter deqR: Cache -> Index -> Time -> Prop.
+  Parameter deqR: Addr -> Cache -> Index -> Time -> Prop.
 
   Parameter mark: ChannelType -> Cache -> Cache -> Time -> Mesg -> Prop.
   Parameter send: ChannelType -> Cache -> Cache -> Time -> Mesg -> Prop.

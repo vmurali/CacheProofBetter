@@ -1,68 +1,73 @@
 Require Import DataTypes.
 
-Module Type StoreAtomicity (dt: DataTypes).
-  Import dt.
-  Parameter respFn: Time -> option Resp.
+Set Implicit Arguments.
 
-  Axiom uniqRespLabels:
-    forall t1 t2, match respFn t1, respFn t2 with
-                    | Some (Build_Resp c1 i1 _), Some (Build_Resp c2 i2 _) =>
-                      c1 = c2 -> i1 = i2 -> t1 = t2
-                    | _, _ => True
-                  end.
+Record Resp := { addrR: Addr;
+                 procR: Cache;
+                 idx: Index;
+                 datum: Data
+               }.
 
-  Axiom localOrdering:
-    forall t1 t2, match respFn t1, respFn t2 with
-                    | Some (Build_Resp c1 i1 _), Some (Build_Resp c2 i2 _) =>
-                      c1 = c2 -> i1 > i2 -> t1 > t2
-                    | _, _ => True
-                  end.
+Section StoreAtomicity.
+  Variable reqFn: Addr -> Cache -> Index -> Req.
 
-  Axiom allPrevious:
-    forall t2, match respFn t2 with
-                 | Some (Build_Resp c2 i2 _) =>
-                   forall i1, i1 < i2 -> exists t1, t1 < t2 /\
-                                                    match respFn t1 with
-                                                      | Some (Build_Resp c1 i _) =>
-                                                        c1 = c2 /\ i = i1
-                                                      | None => False
-                                                    end
-                   | _ => True
-                 end.
+  Variable respFn: Time -> option Resp.
 
-  Axiom storeAtomicity:
-    forall t,
-      match respFn t with
-        | Some (Build_Resp c i d) =>
-          let (a, descQ, dtQ) := reqFn c i in
-          match descQ with
-            | Ld =>
-              (d = initData a /\
-               forall t', t' < t ->
-                          match respFn t' with
-                            | Some (Build_Resp c' i' d') =>
-                              let (a', descQ', dtQ') := reqFn c' i' in
-                              a' = a -> descQ' = St -> False
-                            | _ => True
-                          end) \/
-              (exists tm,
-                 tm < t /\
-                 match respFn tm with
-                   | Some (Build_Resp cm im dm) =>
-                     let (am, descQm, dtQm) := reqFn cm im in
-                     d = dtQm /\ am = a /\ descQm = St /\
-                     forall t', tm < t' < t ->
-                                match respFn t' with
-                                  | Some (Build_Resp c' i' d') =>
-                                    let (a', descQ', dtQ') := reqFn c' i' in
-                                    a' = a -> descQ' = St -> False
-                                  | _ => True
-                                end
-                   | _ => False
-                 end)
-            | St => d = initData zero 
+  Definition noStore a t :=
+    match respFn t with
+      | Some (Build_Resp a' c' i' d') =>
+          a' = a -> desc (reqFn a c' i') = St -> False
+      | _ => True
+    end.
+
+  Record StoreAtomicity :=
+    {
+      uniqRespLabels:
+        forall t1 t2, match respFn t1, respFn t2 with
+                        | Some (Build_Resp a1 c1 i1 _), Some (Build_Resp a2 c2 i2 _) =>
+                          a1 = a2 -> c1 = c2 -> i1 = i2 -> t1 = t2
+                        | _, _ => True
+                      end;
+
+      localOrdering:
+        forall t1 t2, match respFn t1, respFn t2 with
+                        | Some (Build_Resp a1 c1 i1 _), Some (Build_Resp a2 c2 i2 _) =>
+                          a1 = a2 -> c1 = c2 -> i1 > i2 -> t1 > t2
+                        | _, _ => True
+                      end;
+
+      allPrevious:
+        forall t2, match respFn t2 with
+                     | Some (Build_Resp a2 c2 i2 _) =>
+                       forall i1, i1 < i2 -> exists t1, t1 < t2 /\
+                                                        match respFn t1 with
+                                                          | Some (Build_Resp a1 c1 i _) =>
+                                                            a1 = a2 /\ c1 = c2 /\ i = i1
+                                                          | None => False
+                                                        end
+                     | _ => True
+                   end;
+
+      storeAtomicity:
+        forall t,
+          match respFn t with
+            | Some (Build_Resp a c i d) =>
+              let (descQ, dtQ) := reqFn a c i in
+              match descQ with
+                | Ld =>
+                  (d = initData a /\ forall t', t' < t -> noStore a t') \/
+                  (exists tm,
+                     tm < t /\
+                     match respFn tm with
+                       | Some (Build_Resp am cm im dm) =>
+                         let (descQm, dtQm) := reqFn am cm im in
+                         a = am /\ d = dtQm /\ descQm = St /\
+                         forall t', tm < t' < t -> noStore a t'
+                       | _ => False
+                     end)
+                | St => d = initData zero 
+              end
+            | _ => True
           end
-        | _ => True
-      end.
-
+  }.
 End StoreAtomicity.
