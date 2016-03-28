@@ -1,5 +1,20 @@
 Require Import DataTypes List Tree Coq.Relations.Relation_Operators Omega BaseTree.
 
+
+Theorem treeName2: forall p, descendent p (getC nil bHier) ->
+                             match p with
+                               | C x ls => treeNthName x ls
+                             end.
+Proof.
+  intros p desc.
+  remember (getC nil bHier) as y.
+  assert (sth: exists np bp, y = getC np bp) by (exists nil; exists bHier; intuition).
+  pose proof (descImpGetc desc sth) as [nc [bc cEq]].
+  rewrite cEq.
+  apply (treeNameHelp nc bc).
+Qed.
+
+
 Module mkHierProperties (dt: DataTypes).
   Import dt.
 
@@ -22,7 +37,7 @@ Module mkHierProperties (dt: DataTypes).
     forall {p}, defined p -> parent hier p -> False.
   Proof.
     intros p defP hier_p.
-    pose proof (treeName2 defP) as prop.
+    pose proof (treeName2 _ defP) as prop.
     unfold treeNthName in prop.
     unfold parent in hier_p.
     destruct p.
